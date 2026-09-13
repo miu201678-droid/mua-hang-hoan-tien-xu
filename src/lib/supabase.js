@@ -1,11 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Dùng giá trị dự phòng để tránh crash ứng dụng trong quá trình build trên Render
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
-// Dùng cho phía giao diện (client)
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
-
-// Dùng cho phía API Route (server-side) để ghi dữ liệu
-export const supabaseAdmin = createClient(supabaseUrl || '', supabaseServiceKey || supabaseAnonKey || '');
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);

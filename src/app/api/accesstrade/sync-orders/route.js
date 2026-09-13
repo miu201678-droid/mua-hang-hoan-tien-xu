@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// Ép API này chạy ở chế độ động, tránh bị lỗi build tĩnh trên Render
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const apiKey = process.env.ACCESSTRADE_API_KEY;
