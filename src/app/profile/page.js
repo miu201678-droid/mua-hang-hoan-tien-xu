@@ -15,17 +15,15 @@ export default function ProfilePage() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // Hàm format tiền tệ hiển thị có chữ đ nhỏ bên trên
-  const formatMoney = (amount) => {
-    return (
-      <span>
-        {Number(amount || 0).toLocaleString('vi-VN')}
-        <sup className="text-[10px] ml-0.5">đ</sup>
-      </span>
-    );
-  };
+  // Hàm format tiền tệ hiển thị có chữ đ nhỏ
+  const formatMoney = (amount) => (
+    <span>
+      {Number(amount || 0).toLocaleString('vi-VN')}
+      <sup className="text-[10px] ml-0.5">đ</sup>
+    </span>
+  );
 
-  // Hàm tự động thêm dấu chấm khi gõ số tiền rút (VD: 5.000.000)
+  // Xử lý thay đổi số tiền rút
   const handleAmountChange = (e) => {
     const rawValue = e.target.value.replace(/\D/g, '');
     if (!rawValue) {
@@ -36,49 +34,80 @@ export default function ProfilePage() {
     setWithdrawAmount(formatted);
   };
 
-  // Lấy thông tin user & dữ liệu từ Supabase khi load trang
+  // Load thông tin User & Profile từ Supabase
+  const loadUserData = async (currentUser) => {
+    if (!currentUser) return;
+
+    // 1. Lấy thông tin Profile (Tự tạo nếu chưa có)
+    let { data: profile } = await supabase
+      .from('profiles')
+      .select('bank_name, account_number, account_name, balance_available, balance_pending')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (!profile) {
+      const { data: newProfile } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: currentUser.id,
+            email: currentUser.email,
+            balance_available: 0,
+            balance_pending: 0,
+          },
+        ])
+        .select()
+        .single();
+      profile = newProfile;
+    }
+
+    if (profile) {
+      setBankInfo({
+        bankName: profile.bank_name || '',
+        accountNumber: profile.account_number || '',
+        accountName: profile.account_name || '',
+      });
+      setBalance({
+        available: profile.balance_available || 0,
+        pending: profile.balance_pending || 0,
+      });
+    }
+
+    // 2. Lấy lịch sử rút tiền
+    const { data: txHistory } = await supabase
+      .from('withdrawals')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false });
+
+    if (txHistory) {
+      setHistory(txHistory);
+    }
+  };
+
   useEffect(() => {
-    const fetchUserData = async () => {
+    const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-
       if (currentUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('bank_name, account_number, account_name, balance_available, balance_pending')
-          .eq('id', currentUser.id)
-          .single();
-
-        if (profile) {
-          setBankInfo({
-            bankName: profile.bank_name || '',
-            accountNumber: profile.account_number || '',
-            accountName: profile.account_name || '',
-          });
-          setBalance({
-            available: profile.balance_available || 0,
-            pending: profile.balance_pending || 0,
-          });
-        }
-
-        const { data: txHistory } = await supabase
-          .from('withdrawals')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false });
-
-        if (txHistory) {
-          setHistory(txHistory);
-        }
+        await loadUserData(currentUser);
       }
       setLoading(false);
     };
 
-    fetchUserData();
+    initAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        await loadUserData(currentUser);
+      } else {
+        setBankInfo({ bankName: '', accountNumber: '', accountName: '' });
+        setBalance({ available: 0, pending: 0 });
+        setHistory([]);
+      }
       setLoading(false);
     });
 
@@ -109,8 +138,8 @@ export default function ProfilePage() {
         id: user.id,
         bank_name: bankInfo.bankName,
         account_number: bankInfo.accountNumber,
-        account_name: bankInfo.accountName,
-        updated_at: new Date(),
+        account_name: bankInfo.accountName.toUpperCase(),
+        updated_at: new Date().toISOString(),
       });
 
     if (error) {
@@ -120,16 +149,15 @@ export default function ProfilePage() {
     }
   };
 
-  // Xử lý rút tiền
   const handleWithdraw = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    // Lọc bỏ dấu chấm và chữ đ để lấy số thực (VD: "5.000.000đ" -> 5000000)
     const cleanAmount = withdrawAmount.replace(/\D/g, '');
     const amount = Number(cleanAmount);
 
     if (!amount || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
+    if (amount < 40000) return alert('Số tiền rút tối thiểu là 40.000đ');
     if (amount > balance.available) return alert('Số dư khả dụng không đủ');
     if (!bankInfo.accountNumber || !bankInfo.bankName) {
       return alert('Vui lòng cập nhật thông tin ngân hàng trước khi rút tiền');
@@ -138,16 +166,18 @@ export default function ProfilePage() {
     setIsSubmitting(true);
 
     try {
+      // 1. Tạo bản ghi rút tiền
       const { data: newTx, error: txError } = await supabase
         .from('withdrawals')
         .insert([
           {
             user_id: user.id,
+            user_email: user.email,
             amount: amount,
             bank_name: bankInfo.bankName,
             account_number: bankInfo.accountNumber,
             account_name: bankInfo.accountName,
-            status: 'Đang xử lý',
+            status: 'pending',
           },
         ])
         .select()
@@ -155,6 +185,7 @@ export default function ProfilePage() {
 
       if (txError) throw txError;
 
+      // 2. Trừ số dư khả dụng
       const newAvailableBalance = balance.available - amount;
       const { error: updateError } = await supabase
         .from('profiles')
@@ -215,7 +246,7 @@ export default function ProfilePage() {
 
           {user ? (
             <div className="pt-2 border-t space-y-2">
-              <div className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1 border">
+              <div className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1 border text-left">
                 <p><span className="text-slate-400">Mã ID Ví:</span> <code className="bg-slate-200 px-1 py-0.5 rounded text-[10px] text-slate-700">{user.id}</code></p>
                 <p><span className="text-slate-400">Trạng thái:</span> <span className="text-green-600 font-bold">Đã xác thực</span></p>
               </div>
@@ -292,7 +323,7 @@ export default function ProfilePage() {
                 placeholder="Nhập số tài khoản"
                 value={bankInfo.accountNumber}
                 onChange={(e) => setBankInfo({ ...bankInfo, accountNumber: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-rose-400"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-rose-400 font-mono"
                 required
               />
             </div>
@@ -303,7 +334,7 @@ export default function ProfilePage() {
                 placeholder="NGUYEN VAN A"
                 value={bankInfo.accountName}
                 onChange={(e) => setBankInfo({ ...bankInfo, accountName: e.target.value.toUpperCase() })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-rose-400 font-semibold"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-rose-400 font-semibold uppercase"
                 required
               />
             </div>
@@ -331,8 +362,14 @@ export default function ProfilePage() {
                       {new Date(tx.created_at || Date.now()).toLocaleDateString('vi-VN')}
                     </div>
                   </div>
-                  <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {tx.status}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    tx.status === 'completed' || tx.status === 'Đã duyệt'
+                      ? 'bg-green-100 text-green-700'
+                      : tx.status === 'rejected' || tx.status === 'Từ chối'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {tx.status === 'pending' ? '⏳ Đang xử lý' : tx.status}
                   </span>
                 </div>
               ))}
@@ -355,8 +392,8 @@ export default function ProfilePage() {
                 <label className="text-[11px] text-slate-500 block mb-1">Số tiền muốn rút (VNĐ)</label>
                 <input
                   type="text"
-                  placeholder="Nhập số tiền (VD: 500.000)"
-                  value={withdrawAmount ? `${withdrawAmount}đ` : ''}
+                  placeholder="VD: 50.000"
+                  value={withdrawAmount}
                   onChange={handleAmountChange}
                   className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold focus:outline-none focus:border-rose-400"
                   required
@@ -366,6 +403,7 @@ export default function ProfilePage() {
               <div className="bg-slate-50 p-3 rounded-xl border text-[11px] text-slate-600 space-y-1">
                 <p><strong>Ngân hàng nhận:</strong> {bankInfo.bankName || 'Chưa cập nhật'}</p>
                 <p><strong>Số tài khoản:</strong> {bankInfo.accountNumber || 'Chưa cập nhật'}</p>
+                <p><strong>Tên chủ TK:</strong> {bankInfo.accountName || 'Chưa cập nhật'}</p>
               </div>
 
               <div className="flex gap-2 pt-1">

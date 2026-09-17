@@ -11,6 +11,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('withdrawals');
   const [withdrawals, setWithdrawals] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]); // State lưu danh sách người dùng
   const [loading, setLoading] = useState(false);
 
   // Xử lý xác thực mã PIN
@@ -24,11 +25,11 @@ export default function AdminPage() {
     }
   };
 
-  // Tải dữ liệu từ Supabase (Đã tích hợp lấy thông tin ngân hàng qua user_id)
+  // Tải dữ liệu từ Supabase
   const fetchData = async () => {
     setLoading(true);
     
-    // Lấy danh sách yêu cầu rút tiền kèm thông tin ngân hàng từ bảng user_banks
+    // 1. Lấy danh sách yêu cầu rút tiền kèm thông tin ngân hàng
     const { data: withdrawData, error: withdrawError } = await supabase
       .from('withdrawals')
       .select(`
@@ -47,7 +48,7 @@ export default function AdminPage() {
       setWithdrawals(withdrawData);
     }
 
-    // Lấy danh sách đơn hàng
+    // 2. Lấy danh sách đơn hàng
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .select('*')
@@ -58,13 +59,24 @@ export default function AdminPage() {
     } else if (orderData) {
       setOrders(orderData);
     }
+
+    // 3. Lấy danh sách và đếm số lượng người dùng từ bảng 'users'
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (userError) {
+      console.error('Lỗi tải danh sách người dùng:', userError.message);
+    } else if (userData) {
+      setUsers(userData);
+    }
     
     setLoading(false);
   };
 
   // Cập nhật trạng thái duyệt tiền và tự động trừ số dư ví của khách
   const handleUpdateWithdrawStatus = async (item, newStatus) => {
-    // 1. Cập nhật trạng thái lệnh rút tiền trước
     const { error: updateError } = await supabase
       .from('withdrawals')
       .update({ status: newStatus })
@@ -75,13 +87,11 @@ export default function AdminPage() {
       return;
     }
 
-    // 2. Nếu Admin bấm "Duyệt" (completed) thì tiến hành trừ số dư trong bảng users
     if (newStatus === 'completed') {
       const userId = item.user_id;
       const withdrawAmount = Number(item.amount);
 
       if (userId) {
-        // Lấy số dư hiện tại của user từ bảng 'users'
         const { data: userData } = await supabase
           .from('users')
           .select('balance')
@@ -90,9 +100,8 @@ export default function AdminPage() {
 
         if (userData) {
           const currentBalance = Number(userData.balance || 0);
-          const newBalance = Math.max(0, currentBalance - withdrawAmount); // Không để âm số dư
+          const newBalance = Math.max(0, currentBalance - withdrawAmount);
 
-          // Cập nhật lại số dư mới vào cơ sở dữ liệu
           await supabase
             .from('users')
             .update({ balance: newBalance })
@@ -102,10 +111,10 @@ export default function AdminPage() {
     }
 
     alert(`Đã cập nhật trạng thái thành công: ${newStatus}`);
-    fetchData(); // Tải lại dữ liệu mới nhất
+    fetchData();
   };
 
-  // 1. MÀN HÌNH NHẬP MÃ PIN (Nếu chưa đăng nhập)
+  // 1. MÀN HÌNH NHẬP MÃ PIN
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
@@ -141,7 +150,7 @@ export default function AdminPage() {
         <div className="flex justify-between items-center mb-6 pb-4 border-b">
           <div>
             <h1 className="text-xl font-extrabold text-slate-800">👑 Trang Quản Trị Admin</h1>
-            <p className="text-xs text-slate-500">Quản lý đơn hàng & Duyệt lệnh rút tiền cho khách</p>
+            <p className="text-xs text-slate-500">Quản lý người dùng, đơn hàng & duyệt lệnh rút tiền</p>
           </div>
           <button 
             onClick={fetchData}
@@ -152,7 +161,7 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs chọn danh mục */}
-        <div className="flex gap-2 mb-6 border-b pb-2">
+        <div className="flex flex-wrap gap-2 mb-6 border-b pb-2">
           <button
             onClick={() => setActiveTab('withdrawals')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
@@ -169,13 +178,21 @@ export default function AdminPage() {
           >
             📦 Danh sách đơn hàng ({orders.length})
           </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+              activeTab === 'users' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            👥 Người dùng ({users.length})
+          </button>
         </div>
 
         {loading ? (
           <div className="text-center py-10 text-slate-500 text-xs">Đang tải dữ liệu từ Supabase...</div>
         ) : (
           <>
-            {/* Danh sách yêu cầu rút tiền */}
+            {/* Tab 1: Yêu cầu rút tiền */}
             {activeTab === 'withdrawals' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -194,7 +211,6 @@ export default function AdminPage() {
                       <tr><td colSpan="6" className="text-center py-6 text-slate-400">Chưa có yêu cầu rút tiền nào.</td></tr>
                     ) : (
                       withdrawals.map((item) => {
-                        // Lấy thông tin ngân hàng từ bảng liên kết user_banks (nếu có)
                         const bankInfo = Array.isArray(item.user_banks) 
                           ? item.user_banks[0] 
                           : item.user_banks;
@@ -247,7 +263,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Danh sách đơn hàng */}
+            {/* Tab 2: Danh sách đơn hàng */}
             {activeTab === 'orders' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -273,6 +289,40 @@ export default function AdminPage() {
                               {order.status === 1 ? 'Đã duyệt' : 'Chờ duyệt'}
                             </span>
                           </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Tab 3: Danh sách Người dùng */}
+            {activeTab === 'users' && (
+              <div className="overflow-x-auto">
+                <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center">
+                  <span className="text-xs font-bold text-orange-800">Tổng số tài khoản đã đăng ký:</span>
+                  <span className="text-lg font-extrabold text-orange-600">{users.length} người dùng</span>
+                </div>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 border-b">
+                      <th className="p-3">User ID</th>
+                      <th className="p-3">Email / Tên</th>
+                      <th className="p-3">Số dư ví</th>
+                      <th className="p-3">Ngày tham gia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y text-slate-700">
+                    {users.length === 0 ? (
+                      <tr><td colSpan="4" className="text-center py-6 text-slate-400">Chưa có người dùng nào.</td></tr>
+                    ) : (
+                      users.map((user) => (
+                        <tr key={user.id} className="hover:bg-slate-50">
+                          <td className="p-3 font-mono text-slate-500">{user.id}</td>
+                          <td className="p-3 font-bold text-slate-800">{user.email || user.username || 'Khách nặc danh'}</td>
+                          <td className="p-3 font-bold text-green-600">{Number(user.balance || 0).toLocaleString('vi-VN')} đ</td>
+                          <td className="p-3 text-slate-500">{user.created_at ? new Date(user.created_at).toLocaleString('vi-VN') : 'N/A'}</td>
                         </tr>
                       ))
                     )}

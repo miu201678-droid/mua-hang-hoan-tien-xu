@@ -203,17 +203,25 @@ export default function Home() {
                 <Link href="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-100 rounded-xl transition">
                   <span>🏠</span> Trang chủ
                 </Link>
+                
                 <Link href="/deal-1k" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 hover:bg-orange-50 hover:text-orange-600 rounded-xl transition font-bold text-orange-600">
                   <span>🔥</span> Săn Deal 1K
                 </Link>
+
+                <Link href="/vong-quay" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 hover:bg-amber-50 hover:text-amber-600 rounded-xl transition font-bold text-amber-600">
+                  <span>🎁</span> Vòng Quay May Mắn
+                </Link>
+
                 <Link href="/withdraw" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-100 rounded-xl transition">
                   <span>💳</span> Rút tiền
                 </Link>
+
                 <Link href="/profile" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-100 rounded-xl transition">
                   <span>👤</span> Tài khoản
                 </Link>
 
                 <hr className="my-2 border-slate-100" />
+                
                 <Link href="/admin" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition font-bold">
                   <span>⚙️</span> Trang Quản Trị (Admin)
                 </Link>
