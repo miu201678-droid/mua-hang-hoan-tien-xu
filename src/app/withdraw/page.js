@@ -220,6 +220,7 @@ export default function WithdrawPage() {
       </header>
 
       <main className="max-w-md mx-auto p-4 space-y-4">
+        {/* KHỐI SỐ DƯ */}
         <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-3xl p-5 text-white shadow-md space-y-3">
           <div className="flex justify-between items-start">
             <div>
@@ -234,53 +235,63 @@ export default function WithdrawPage() {
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-          <div className="text-left">
-            <h3 className="font-bold text-slate-800 text-sm">⚡ Quy Trình Nhận Hoàn Tiền Siêu Tốc</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Hiểu rõ quy trình ghi nhận đơn hàng và thời gian tiền hoàn về tài khoản.</p>
+        {/* KHỐI LỘ TRÌNH HOÀN TIỀN VỚI HIỆU ỨNG ĐÈN LED */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+          <div className="text-center space-y-1">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+              📈 Lộ trình hoàn tiền
+            </span>
+            <h3 className="font-bold text-slate-800 text-lg">Quy Trình Nhận Hoàn Tiền Siêu Tốc</h3>
+            <p className="text-xs text-slate-500">Hiểu rõ quy trình ghi nhận đơn hàng và thời gian tiền hoàn về tài khoản.</p>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-base shrink-0">
-                🛍️
-              </div>
-              <div className="text-left flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 text-xs">BƯỚC 1: MUA HÀNG</span>
-                  <span className="text-[10px] bg-orange-100 text-orange-600 font-semibold px-2 py-0.5 rounded-full">Hôm nay</span>
+          <div className="space-y-4 relative">
+            {/* BƯỚC 1 - Đèn LED Cam */}
+            <div className="relative group rounded-3xl p-[1.5px] bg-gradient-to-r from-orange-500/30 via-amber-500/60 to-orange-500/30 shadow-[0_0_18px_rgba(249,115,22,0.2)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(249,115,22,0.4)]">
+              <div className="bg-slate-50/90 backdrop-blur-sm p-5 rounded-[22px] text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md shadow-orange-500/30">
+                  🛍️
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <div className="text-[10px] font-extrabold text-slate-400 tracking-wider">BƯỚC 1: MUA HÀNG</div>
+                <div className="text-base font-black text-slate-800">Ngày mua</div>
+                <span className="inline-block text-[10px] bg-orange-100 text-orange-600 font-bold px-3 py-0.5 rounded-full">
+                  Hôm nay
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed pt-1">
                   Bạn copy link dán vào hệ thống, nhận link hoàn tiền và tiến hành đặt mua hàng.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-base shrink-0">
-                ☑️
-              </div>
-              <div className="text-left flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 text-xs">BƯỚC 2: ĐỐI SOÁT</span>
-                  <span className="text-[10px] bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full">Ngày mai</span>
+            {/* BƯỚC 2 - Đèn LED Xanh Dương */}
+            <div className="relative group rounded-3xl p-[1.5px] bg-gradient-to-r from-blue-500/30 via-sky-500/60 to-blue-500/30 shadow-[0_0_18px_rgba(59,130,246,0.2)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]">
+              <div className="bg-slate-50/90 backdrop-blur-sm p-5 rounded-[22px] text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-blue-500 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md shadow-blue-500/30">
+                  ☑️
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <div className="text-[10px] font-extrabold text-slate-400 tracking-wider">BƯỚC 2: ĐỐI SOÁT</div>
+                <div className="text-base font-black text-slate-800">Ghi nhận</div>
+                <span className="inline-block text-[10px] bg-blue-100 text-blue-600 font-bold px-3 py-0.5 rounded-full">
+                  Ngày mai
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed pt-1">
                   Sàn ghi nhận đơn hàng tạm tính và tự động đồng bộ hiển thị trong lịch sử ví.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-base shrink-0">
-                🛡️
-              </div>
-              <div className="text-left flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 text-xs">BƯỚC 3: THỰC NHẬN</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-600 font-semibold px-2 py-0.5 rounded-full">7 ngày</span>
+            {/* BƯỚC 3 - Đèn LED Xanh Lá */}
+            <div className="relative group rounded-3xl p-[1.5px] bg-gradient-to-r from-emerald-500/30 via-teal-500/60 to-emerald-500/30 shadow-[0_0_18px_rgba(16,185,129,0.2)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]">
+              <div className="bg-slate-50/90 backdrop-blur-sm p-5 rounded-[22px] text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md shadow-emerald-500/30">
+                  🛡️
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <div className="text-[10px] font-extrabold text-slate-400 tracking-wider">BƯỚC 3: THỰC NHẬN</div>
+                <div className="text-base font-black text-slate-800">Có thể rút</div>
+                <span className="inline-block text-[10px] bg-emerald-100 text-emerald-600 font-bold px-3 py-0.5 rounded-full">
+                  7 ngày
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed pt-1">
                   Sau khi đơn hoàn thành, tiền khả dụng sẽ được cộng vào ví và có thể rút ngay.
                 </p>
               </div>
@@ -288,6 +299,7 @@ export default function WithdrawPage() {
           </div>
         </div>
 
+        {/* THỐNG KÊ TIẾT KIỆM */}
         <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-800 text-xs">Theo dõi số tiền tiết kiệm</h3>
@@ -390,6 +402,7 @@ export default function WithdrawPage() {
           )}
         </div>
 
+        {/* YÊU CẦU RÚT TIỀN */}
         <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-3">
           <h3 className="font-bold text-slate-800 text-xs">💸 Yêu Cầu Rút Tiền</h3>
           <form onSubmit={handleWithdraw} className="space-y-3">
@@ -414,6 +427,7 @@ export default function WithdrawPage() {
           </form>
         </div>
 
+        {/* HƯỚNG DẪN RÚT TIỀN */}
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
           <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
             <span>📖</span> Hướng Dẫn Rút Tiền
@@ -434,6 +448,7 @@ export default function WithdrawPage() {
           </ul>
         </div>
 
+        {/* THÔNG TIN NGÂN HÀNG */}
         <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-3">
           <h3 className="font-bold text-slate-800 text-xs">🏦 Tài Khoản Ngân Hàng Nhận Tiền</h3>
           <form onSubmit={handleSaveBank} className="space-y-2.5">
@@ -480,6 +495,7 @@ export default function WithdrawPage() {
           </form>
         </div>
 
+        {/* LỊCH SỬ RÚT TIỀN */}
         <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-3">
           <h3 className="font-bold text-slate-800 text-xs">📋 Lịch Sử Rút Tiền</h3>
           {history.length === 0 ? (
@@ -512,6 +528,7 @@ export default function WithdrawPage() {
         </div>
       </main>
 
+      {/* thanh BOTTOM NAVIGATION */}
       <div className="fixed bottom-3 left-3 right-3 z-30 max-w-md mx-auto">
         <nav className="bg-white/95 backdrop-blur border border-slate-200 rounded-full shadow-lg flex items-center justify-between px-2 py-2.5">
           <Link href="/" className="flex flex-col items-center flex-1 text-slate-700 hover:text-orange-500 transition">

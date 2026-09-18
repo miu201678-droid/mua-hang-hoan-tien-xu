@@ -15,6 +15,17 @@ export default function ProfilePage() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [history, setHistory] = useState([]);
 
+  // State cho Modal thông báo tùy chỉnh
+  const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'info' });
+
+  const showAlert = (title, message, type = 'error') => {
+    setModal({ show: true, title, message, type });
+  };
+
+  const closeModal = () => {
+    setModal((prev) => ({ ...prev, show: false }));
+  };
+
   // Hàm format tiền tệ hiển thị có chữ đ nhỏ
   const formatMoney = (amount) => (
     <span>
@@ -38,7 +49,6 @@ export default function ProfilePage() {
   const loadUserData = async (currentUser) => {
     if (!currentUser) return;
 
-    // 1. Lấy thông tin Profile (Tự tạo nếu chưa có)
     let { data: profile } = await supabase
       .from('profiles')
       .select('bank_name, account_number, account_name, balance_available, balance_pending')
@@ -73,7 +83,6 @@ export default function ProfilePage() {
       });
     }
 
-    // 2. Lấy lịch sử rút tiền
     const { data: txHistory } = await supabase
       .from('withdrawals')
       .select('*')
@@ -130,7 +139,7 @@ export default function ProfilePage() {
 
   const handleSaveBank = async (e) => {
     e.preventDefault();
-    if (!user) return alert('Vui lòng đăng nhập trước!');
+    if (!user) return showAlert('Chưa đăng nhập', 'Vui lòng đăng nhập trước!', 'warning');
 
     const { error } = await supabase
       .from('profiles')
@@ -143,9 +152,9 @@ export default function ProfilePage() {
       });
 
     if (error) {
-      alert('Lỗi lưu thông tin ngân hàng: ' + error.message);
+      showAlert('Lỗi lưu thông tin', error.message, 'error');
     } else {
-      alert('Đã lưu thông tin ngân hàng thành công!');
+      showAlert('Thành công', 'Đã lưu thông tin ngân hàng thành công!', 'success');
     }
   };
 
@@ -156,17 +165,22 @@ export default function ProfilePage() {
     const cleanAmount = withdrawAmount.replace(/\D/g, '');
     const amount = Number(cleanAmount);
 
-    if (!amount || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
-    if (amount < 40000) return alert('Số tiền rút tối thiểu là 40.000đ');
-    if (amount > balance.available) return alert('Số dư khả dụng không đủ');
+    if (!amount || amount <= 0) {
+      return showAlert('Thông báo', 'Vui lòng nhập số tiền hợp lệ', 'warning');
+    }
+    if (amount < 40000) {
+      return showAlert('Hạn mức rút tiền', 'Số tiền rút tối thiểu là 40.000đ', 'warning');
+    }
+    if (amount > balance.available) {
+      return showAlert('Rút tiền thất bại', 'Số dư khả dụng không đủ', 'error');
+    }
     if (!bankInfo.accountNumber || !bankInfo.bankName) {
-      return alert('Vui lòng cập nhật thông tin ngân hàng trước khi rút tiền');
+      return showAlert('Thiếu thông tin', 'Vui lòng cập nhật thông tin ngân hàng trước khi rút tiền', 'warning');
     }
 
     setIsSubmitting(true);
 
     try {
-      // 1. Tạo bản ghi rút tiền
       const { data: newTx, error: txError } = await supabase
         .from('withdrawals')
         .insert([
@@ -185,7 +199,6 @@ export default function ProfilePage() {
 
       if (txError) throw txError;
 
-      // 2. Trừ số dư khả dụng
       const newAvailableBalance = balance.available - amount;
       const { error: updateError } = await supabase
         .from('profiles')
@@ -198,9 +211,9 @@ export default function ProfilePage() {
       setHistory([newTx, ...history]);
       setShowWithdrawModal(false);
       setWithdrawAmount('');
-      alert('Gửi yêu cầu rút tiền thành công!');
+      showAlert('Gửi yêu cầu thành công', 'Gửi yêu cầu rút tiền thành công! Admin sẽ duyệt trong 24h-48h.', 'success');
     } catch (error) {
-      alert('Lỗi xử lý giao dịch: ' + error.message);
+      showAlert('Lỗi giao dịch', error.message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -215,7 +228,36 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28 font-sans text-left">
+    <div className="min-h-screen bg-slate-50 pb-28 font-sans text-left relative">
+      {/* MODAL THÔNG BÁO TÙY CHỈNH */}
+      {modal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-xs rounded-3xl p-6 text-center shadow-2xl border border-slate-100">
+            <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-3 shadow-inner">
+              {modal.type === 'error' && <span className="bg-rose-100 text-rose-500 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
+              {modal.type === 'success' && <span className="bg-emerald-100 text-emerald-500 w-full h-full rounded-2xl flex items-center justify-center">🎉</span>}
+              {modal.type === 'warning' && <span className="bg-amber-100 text-amber-500 w-full h-full rounded-2xl flex items-center justify-center">🔔</span>}
+            </div>
+
+            <h3 className="text-base font-bold text-slate-800 mb-1">{modal.title}</h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-5">{modal.message}</p>
+
+            <button
+              onClick={closeModal}
+              className={`w-full py-2.5 rounded-xl font-bold text-xs text-white shadow-md active:scale-95 transition ${
+                modal.type === 'error'
+                  ? 'bg-rose-500 hover:bg-rose-600'
+                  : modal.type === 'success'
+                  ? 'bg-emerald-500 hover:bg-emerald-600'
+                  : 'bg-orange-500 hover:bg-orange-600'
+              }`}
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="p-4 bg-white border-b sticky top-0 z-10 flex items-center justify-between">
         <Link href="/" className="text-slate-600 text-sm font-bold">
           ← Trang chủ
@@ -380,7 +422,7 @@ export default function ProfilePage() {
 
       {/* Modal Rút tiền */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-xl">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-sm">Rút Tiền Về Ngân Hàng</h3>
