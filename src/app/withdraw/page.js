@@ -12,8 +12,19 @@ export default function WithdrawPage() {
   const [balance, setBalance] = useState({ available: 0, pending: 0 });
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [history, setHistory] = useState([]);
-  const [ordersList, setOrdersList] = useState([]); // <-- State lưu danh sách đơn hàng
+  const [ordersList, setOrdersList] = useState([]);
   const [timeRange, setTimeRange] = useState('7');
+
+  // State quản lý Modal thông báo đẹp mắt
+  const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'info' });
+
+  const showAlert = (title, message, type = 'error') => {
+    setModal({ show: true, title, message, type });
+  };
+
+  const closeModal = () => {
+    setModal((prev) => ({ ...prev, show: false }));
+  };
 
   const [stats, setStats] = useState({
     totalSavings: 0,
@@ -72,7 +83,7 @@ export default function WithdrawPage() {
           let totalOrderValue = 0;
 
           if (ordersData) {
-            setOrdersList(ordersData); // <-- Lưu vào state để hiện lên giao diện
+            setOrdersList(ordersData);
             ordersData.forEach((ord) => {
               if (ord.status === 'Thành công') {
                 totalCommission += Number(ord.commission || 0);
@@ -101,7 +112,7 @@ export default function WithdrawPage() {
 
   const handleSaveBank = async (e) => {
     e.preventDefault();
-    if (!user) return alert('Vui lòng đăng nhập!');
+    if (!user) return showAlert('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện!', 'warning');
 
     const { error } = await supabase.from('user_banks').upsert({
       user_id: user.id,
@@ -112,21 +123,25 @@ export default function WithdrawPage() {
     });
 
     if (error) {
-      alert('Lỗi khi lưu ngân hàng: ' + error.message);
+      showAlert('Lỗi Lưu Ngân Hàng', error.message, 'error');
     } else {
-      alert('Lưu thông tin ngân hàng thành công!');
+      showAlert('Thành Công', 'Lưu thông tin ngân hàng thành công!', 'success');
     }
   };
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
-    if (!user) return alert('Vui lòng đăng nhập!');
+    if (!user) return showAlert('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện!', 'warning');
 
     const amount = Number(withdrawAmount);
-    if (!amount || amount < 40000) return alert('Số tiền rút tối thiểu là 40.000đ');
-    if (amount > balance.available) return alert('Số dư khả dụng không đủ');
+    if (!amount || amount < 40000) {
+      return showAlert('Hạn Mức Rút Tiền', 'Số tiền rút tối thiểu là 40.000đ', 'warning');
+    }
+    if (amount > balance.available) {
+      return showAlert('Rút Tiền Thất Bại', 'Số dư khả dụng của bạn không đủ để thực hiện giao dịch này.', 'error');
+    }
     if (!bankInfo.accountNumber || !bankInfo.bankName) {
-      return alert('Vui lòng lưu thông tin ngân hàng nhận tiền trước!');
+      return showAlert('Thiếu Thông Tin', 'Vui lòng lưu thông tin ngân hàng nhận tiền ở bên dưới trước!', 'warning');
     }
 
     setSubmitting(true);
@@ -145,7 +160,7 @@ export default function WithdrawPage() {
     setSubmitting(false);
 
     if (error) {
-      alert('Tạo yêu cầu thất bại: ' + error.message);
+      showAlert('Gửi Yêu Cầu Thất Bại', error.message, 'error');
     } else if (data) {
       setHistory([data[0], ...history]);
       setBalance((prev) => ({
@@ -153,7 +168,7 @@ export default function WithdrawPage() {
         pending: prev.pending + amount,
       }));
       setWithdrawAmount('');
-      alert('Đã gửi yêu cầu rút tiền thành công! Admin sẽ đối soát và chuyển khoản cho bạn.');
+      showAlert('Gửi Yêu Cầu Thành Công', 'Đã gửi yêu cầu rút tiền thành công! Admin sẽ đối soát và chuyển khoản cho bạn trong 24h-48h.', 'success');
     }
   };
 
@@ -166,7 +181,36 @@ export default function WithdrawPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28 font-sans text-left">
+    <div className="min-h-screen bg-slate-50 pb-28 font-sans text-left relative">
+      {/* MODAL THÔNG BÁO XỊN XÒ */}
+      {modal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-xs rounded-3xl p-6 text-center shadow-2xl border border-slate-100 transform transition-all scale-100">
+            <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-3 shadow-inner">
+              {modal.type === 'error' && <span className="bg-rose-100 text-rose-500 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
+              {modal.type === 'success' && <span className="bg-emerald-100 text-emerald-500 w-full h-full rounded-2xl flex items-center justify-center">🎉</span>}
+              {modal.type === 'warning' && <span className="bg-amber-100 text-amber-500 w-full h-full rounded-2xl flex items-center justify-center">🔔</span>}
+            </div>
+
+            <h3 className="text-base font-bold text-slate-800 mb-1">{modal.title}</h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-5">{modal.message}</p>
+
+            <button
+              onClick={closeModal}
+              className={`w-full py-2.5 rounded-xl font-bold text-xs text-white shadow-md active:scale-95 transition ${
+                modal.type === 'error'
+                  ? 'bg-rose-500 hover:bg-rose-600'
+                  : modal.type === 'success'
+                  ? 'bg-emerald-500 hover:bg-emerald-600'
+                  : 'bg-orange-500 hover:bg-orange-600'
+              }`}
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="p-4 bg-white border-b sticky top-0 z-10 flex items-center justify-between">
         <Link href="/" className="text-slate-600 text-sm font-bold">
           ← Trang chủ
