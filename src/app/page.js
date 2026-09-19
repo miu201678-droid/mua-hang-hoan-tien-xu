@@ -15,6 +15,9 @@ export default function Home() {
   const [resultData, setResultData] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  // State quản lý bước LED chạy tự động (0: Dán link, 1: Mở link, 2: Đặt hàng, 3: Rút tiền)
+  const [activeStep, setActiveStep] = useState(0);
+
   useEffect(() => {
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -28,6 +31,14 @@ export default function Home() {
     });
 
     return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  // Effect chạy hiệu ứng LED tự động chuyển bước mỗi 1.5 giây
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % 4);
+    }, 1500);
+    return () => clearInterval(timer);
   }, []);
 
   const extractProductParam = (urlStr) => {
@@ -52,10 +63,22 @@ export default function Home() {
     return null;
   };
 
-  const buildShopeeAffiliateLink = (originLink) => {
+  const buildShopeeAffiliateLink = async (originLink) => {
+    const userIdSub = user ? user.id : 'guest';
+
+    try {
+      const res = await fetch(`/api/convert?url=${encodeURIComponent(originLink)}&userId=${userIdSub}`);
+      const data = await res.json();
+
+      if (data && data.short_url) {
+        return data.short_url;
+      }
+    } catch (err) {
+      console.warn("Không thể tạo link qua API rút gọn nội bộ, dùng link an_redir dự phòng:", err);
+    }
+
     const cleanLanding = originLink ? originLink.split('?')[0] : 'https://shopee.vn';
     const encodedLanding = encodeURIComponent(cleanLanding);
-    const userIdSub = user ? user.id : 'guest';
     return `https://s.shopee.vn/an_redir?origin_link=${encodedLanding}&affiliate_id=${MY_AFFILIATE_ID}&sub_id=${userIdSub}`;
   };
 
@@ -75,10 +98,9 @@ export default function Home() {
       const isTikTok = param.type === 'tiktok_url' || param.value.includes('tiktok.com');
       let data;
 
-      const COMMISSION_SHARE_RATE = 0.55; // Tỷ lệ khách nhận (55%)
+      const COMMISSION_SHARE_RATE = 0.55;
 
       if (isTikTok) {
-        // Gọi trực tiếp API addlivetag cho TikTok
         const apiUrl = `https://data.addlivetag.com/tiktok/product.php?url=${encodeURIComponent(inputUrl.trim())}`;
         const res = await fetch(apiUrl);
         data = await res.json();
@@ -106,7 +128,6 @@ export default function Home() {
           setErrorMsg('Không tìm thấy thông tin sản phẩm TikTok hoặc sản phẩm không có hoa hồng affiliate.');
         }
       } else {
-        // Gọi API Shopee
         const apiUrl = `https://data.addlivetag.com/product-data/product-data.php?url=${encodeURIComponent(inputUrl.trim())}`;
         const res = await fetch(apiUrl);
         data = await res.json();
@@ -119,7 +140,7 @@ export default function Home() {
           const rawPercent = info.totalRatePercent ? Math.abs(info.totalRatePercent) : 0;
           const userCashbackPercent = (rawPercent * COMMISSION_SHARE_RATE).toFixed(1);
           
-          const affLink = buildShopeeAffiliateLink(info.productLink || inputUrl);
+          const affLink = await buildShopeeAffiliateLink(info.productLink || inputUrl);
 
           setResultData({
             name: info.productName,
@@ -144,8 +165,37 @@ export default function Home() {
     }
   };
 
+  // Mảng cấu hình 4 bước của Stepper
+  const steps = [
+    { label: 'Dán link', icon: '📋' },
+    { label: 'Mở link', icon: '🛒' },
+    { label: 'Đặt hàng', icon: '🧾' },
+    { label: 'Rút tiền', icon: '💵' },
+  ];
+
+  // Tính tỷ lệ phần trăm độ dài vệt sáng thanh nối LED (0%, 33%, 66%, 100%)
+  const progressPercent = (activeStep / 3) * 100;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-white relative overflow-hidden pb-24 font-sans">
+      {/* Dynamic Keyframes cho viền LED */}
+      <style jsx global>{`
+        @keyframes ledMove {
+          0% { background-position: 0% 0%; }
+          100% { background-position: 300% 0%; }
+        }
+        .led-border {
+          background: linear-gradient(90deg, #f97316, #fb923c, #0284c7, #f97316);
+          background-size: 300% 100%;
+          animation: ledMove 6s linear infinite;
+        }
+        .led-border-scanning {
+          background: linear-gradient(90deg, #f97316, #38bdf8, #22c55e, #f97316);
+          background-size: 300% 100%;
+          animation: ledMove 0.8s linear infinite;
+        }
+      `}</style>
+
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5 -z-0">
         <img src="/logo.png" alt="Watermark" className="w-96 h-96 object-contain" />
       </div>
@@ -245,88 +295,95 @@ export default function Home() {
             Tiết kiệm tối đa cho mọi đơn hàng Shopee & TikTok. Nhận tiền mặt trực tiếp về tài khoản ngân hàng.
           </p>
 
-          <div className="mt-6 bg-white p-4 rounded-2xl shadow-sm border border-blue-100 text-left">
-            <h2 className="font-bold text-slate-800 text-sm text-center">Dán Link kiểm tra hoàn tiền</h2>
-            <p className="text-[11px] text-slate-500 mb-3 text-center">Hỗ trợ link sản phẩm Shopee & TikTok</p>
-            
-            <input 
-              type="text" 
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="Dán link sản phẩm Shopee hoặc TikTok..." 
-              className="w-full bg-slate-100 px-3 py-2.5 rounded-xl text-xs outline-none border focus:border-blue-400 mb-3"
-            />
+          {/* CARD NHẬP LINK BỌC VIỀN LED */}
+          <div className={`mt-6 p-[2px] rounded-2xl transition-all duration-300 ${
+            loading 
+              ? 'led-border-scanning shadow-[0_0_20px_rgba(249,115,22,0.4)]' 
+              : 'led-border shadow-sm'
+          }`}>
+            <div className="bg-white p-4 rounded-[14px] text-left">
+              <h2 className="font-bold text-slate-800 text-sm text-center">Dán Link kiểm tra hoàn tiền</h2>
+              <p className="text-[11px] text-slate-500 mb-3 text-center">Hỗ trợ link sản phẩm Shopee & TikTok</p>
+              
+              <input 
+                type="text" 
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                placeholder="Dán link sản phẩm Shopee hoặc TikTok..." 
+                className="w-full bg-slate-100 px-3 py-2.5 rounded-xl text-xs outline-none border focus:border-blue-400 mb-3"
+              />
 
-            <button 
-              onClick={handleCheckLink}
-              disabled={loading}
-              className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm shadow flex items-center justify-center gap-1 transition disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="animate-pulse">⏳ Đang truy xuất dữ liệu...</span>
-              ) : (
-                '⚡ KIỂM TRA & NHẬN LINK'
-              )}
-            </button>
+              <button 
+                onClick={handleCheckLink}
+                disabled={loading}
+                className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm shadow flex items-center justify-center gap-1 transition disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="animate-pulse">⚡ ĐANG QUÉT LINK HOÀN TIỀN...</span>
+                ) : (
+                  '⚡ KIỂM TRA & NHẬN LINK'
+                )}
+              </button>
 
-            {errorMsg && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-center space-y-2">
-                <p className="text-red-500 text-[11px] font-medium">{errorMsg}</p>
-              </div>
-            )}
-
-            {resultData && (
-              <div className="mt-4 p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-left space-y-3">
-                <div className="flex gap-3 items-center">
-                  <img 
-                    src={resultData.image} 
-                    alt={resultData.name} 
-                    className="w-16 h-16 object-cover rounded-lg border bg-white flex-shrink-0" 
-                  />
-                  <div className="overflow-hidden">
-                    <h3 className="font-bold text-xs text-slate-800 line-clamp-2 leading-tight">
-                      {resultData.name}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Shop: <span className="font-semibold text-slate-700">{resultData.shopName}</span>
-                    </p>
-                    <p className="text-xs font-extrabold text-orange-600 mt-0.5">
-                      {resultData.price ? resultData.price.toLocaleString('vi-VN') + ' đ' : 'Đang cập nhật'}
-                    </p>
-                  </div>
+              {errorMsg && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-center space-y-2">
+                  <p className="text-red-500 text-[11px] font-medium">{errorMsg}</p>
                 </div>
+              )}
 
-                <div className="bg-orange-100 border border-orange-200 p-2.5 rounded-xl flex justify-between items-center">
-                  <div>
-                    <div className="text-[10px] text-orange-800 font-medium">Tiền hoàn của bạn:</div>
-                    <div className="text-base font-black text-orange-600">
-                      +{resultData.cashbackMoney.toLocaleString('vi-VN')} đ
+              {resultData && (
+                <div className="mt-4 p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-left space-y-3">
+                  <div className="flex gap-3 items-center">
+                    <img 
+                      src={resultData.image} 
+                      alt={resultData.name} 
+                      className="w-16 h-16 object-cover rounded-lg border bg-white flex-shrink-0" 
+                    />
+                    <div className="overflow-hidden">
+                      <h3 className="font-bold text-xs text-slate-800 line-clamp-2 leading-tight">
+                        {resultData.name}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Shop: <span className="font-semibold text-slate-700">{resultData.shopName}</span>
+                      </p>
+                      <p className="text-xs font-extrabold text-orange-600 mt-0.5">
+                        {resultData.price ? resultData.price.toLocaleString('vi-VN') + ' đ' : 'Đang cập nhật'}
+                      </p>
                     </div>
                   </div>
-                  <span className="bg-orange-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">
-                    ~{resultData.cashbackPercent}%
-                  </span>
-                </div>
 
-                {user ? (
-                  <a 
-                    href={resultData.affiliateUrl} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow transition uppercase"
-                  >
-                    🛒 MUA NGAY ĐỂ NHẬN HOÀN TIỀN
-                  </a>
-                ) : (
-                  <Link 
-                    href="/profile" 
-                    className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-extrabold py-2.5 rounded-xl text-xs shadow transition uppercase"
-                  >
-                    👉 ĐĂNG NHẬP ĐỂ MUA HÀNG & NHẬN HOÀN TIỀN
-                  </Link>
-                )}
-              </div>
-            )}
+                  <div className="bg-orange-100 border border-orange-200 p-2.5 rounded-xl flex justify-between items-center">
+                    <div>
+                      <div className="text-[10px] text-orange-800 font-medium">Tiền hoàn của bạn:</div>
+                      <div className="text-base font-black text-orange-600">
+                        +{resultData.cashbackMoney.toLocaleString('vi-VN')} đ
+                      </div>
+                    </div>
+                    <span className="bg-orange-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg">
+                      ~{resultData.cashbackPercent}%
+                    </span>
+                  </div>
+
+                  {user ? (
+                    <a 
+                      href={resultData.affiliateUrl} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-extrabold py-2.5 rounded-xl text-xs shadow transition uppercase"
+                    >
+                      🛒 MUA NGAY ĐỂ NHẬN HOÀN TIỀN
+                    </a>
+                  ) : (
+                    <Link 
+                      href="/profile" 
+                      className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white font-extrabold py-2.5 rounded-xl text-xs shadow transition uppercase"
+                    >
+                      👉 ĐĂNG NHẬP ĐỂ MUA HÀNG & NHẬN HOÀN TIỀN
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3 mt-6">
@@ -345,47 +402,153 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Hướng dẫn nhanh */}
-        <section className="bg-white/90 backdrop-blur p-5 rounded-3xl shadow-sm border border-orange-100 text-center">
-          <span className="inline-block bg-orange-100 text-orange-600 text-[11px] font-semibold px-3 py-1 rounded-full mb-2">
+        {/* Hướng dẫn dạng Stepper LED Tự Động Chạy */}
+        <section className="bg-white/90 backdrop-blur p-5 rounded-3xl shadow-sm border border-emerald-100 text-center">
+          <span className="inline-block bg-emerald-50 text-emerald-600 text-[11px] font-semibold px-3 py-1 rounded-full mb-2">
             ❓ Hướng dẫn nhanh
           </span>
-          <h2 className="text-lg font-bold text-slate-800">Cách Nhận Hoàn Tiền Trong 3 Bước</h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-6">
-            Chỉ mất chưa đầy 1 phút để tối ưu hóa chi phí mua sắm của bạn.
+          <h2 className="text-lg font-bold text-slate-800">Cách Nhận Hoàn Tiền</h2>
+          <p className="text-[11px] text-slate-500 mt-1 mb-8">
+            Chỉ mất chưa đầy 1 phút để hoàn tất quy trình
           </p>
 
-          <div className="space-y-4 text-left">
-            <div className="relative bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <span className="absolute -top-3 left-4 bg-orange-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">1</span>
-              <div className="flex items-start gap-3 pt-1">
-                <div className="p-2 bg-orange-50 text-orange-500 rounded-xl text-xl">📋</div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-xs">Sao chép link sản phẩm</h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Mở ứng dụng Shopee hoặc TikTok, tìm sản phẩm rồi sao chép đường dẫn.</p>
+          <div className="relative flex items-center justify-between max-w-sm mx-auto px-2">
+            {/* Thanh nền xám đệm dưới */}
+            <div className="absolute top-5 left-6 right-6 h-1 bg-slate-100 -z-0 rounded-full" />
+
+            {/* Thanh LED màu xanh phát sáng chạy theo tỉ lệ % */}
+            <div 
+              className="absolute top-5 left-6 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500 -z-0 shadow-[0_0_8px_rgba(16,185,129,0.8)]" 
+              style={{ width: `calc(${progressPercent}% * 0.82)` }}
+            />
+
+            {/* Vòng lặp hiển thị 4 nút bước */}
+            {steps.map((step, idx) => {
+              const isPassed = idx <= activeStep;
+              const isCurrent = idx === activeStep;
+
+              return (
+                <div key={idx} className="flex flex-col items-center relative z-10 transition-all duration-300">
+                  <div 
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm border-2 transition-all duration-500 ${
+                      isPassed
+                        ? 'bg-emerald-500 text-white border-white shadow-[0_0_10px_rgba(16,185,129,0.6)]'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    } ${isCurrent ? 'scale-110 animate-pulse border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.9)]' : ''}`}
+                  >
+                    {step.icon}
+                  </div>
+                  <span className={`text-[11px] mt-2 transition-colors duration-300 ${
+                    isCurrent ? 'font-bold text-emerald-600 scale-105' : isPassed ? 'font-semibold text-slate-800' : 'font-medium text-slate-400'
+                  }`}>
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* SECTION: HƯỚNG DẪN MUA SẮM SHOPEE (UI MOCKUP KHÔNG DÙNG FILE ẢNH) */}
+        <section className="bg-white/90 backdrop-blur p-5 rounded-3xl shadow-sm border border-orange-100 text-left space-y-4 font-sans">
+          <div className="text-center">
+            <span className="inline-block bg-orange-50 text-orange-600 text-[11px] font-semibold px-3 py-1 rounded-full mb-1">
+              📖 Chi tiết từng bước
+            </span>
+            <h2 className="text-lg font-bold text-slate-800">Hướng dẫn mua sắm Shopee</h2>
+          </div>
+
+          {/* BƯỚC 1 */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-3">
+            <p className="text-xs leading-relaxed text-slate-700">
+              <strong className="text-orange-500">Bước 1:</strong> Tìm sản phẩm bạn muốn mua trên Shopee. Nhấn vào biểu tượng &quot;Chia sẻ&quot; góc phải màn hình &amp; sao chép đường dẫn.
+            </p>
+            <div className="bg-amber-50 rounded-xl p-2.5 border border-amber-100 flex items-start gap-2 text-[11px] text-amber-800">
+              <span className="text-amber-500 font-bold">⚠️</span>
+              <span>Xóa sản phẩm khỏi giỏ hàng nếu đã thêm trước đó</span>
+            </div>
+            
+            <div className="rounded-xl p-3 bg-gradient-to-b from-orange-500 to-orange-600 text-white space-y-2 shadow-inner">
+              <div className="flex justify-between items-center text-[10px] opacity-90 border-b border-orange-400 pb-1.5">
+                <span>🛒 Shopee App</span>
+                <span className="bg-white/20 px-2 py-0.5 rounded-full">Chi tiết sản phẩm</span>
+              </div>
+              <div className="flex items-center justify-between bg-white text-slate-800 p-2.5 rounded-lg shadow">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🛍️</span>
+                  <div>
+                    <div className="font-semibold text-xs truncate max-w-[130px]">Sản phẩm Shopee...</div>
+                    <div className="text-orange-600 font-bold text-xs">150.000đ</div>
+                  </div>
+                </div>
+                <div className="bg-orange-100 text-orange-600 px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 animate-pulse">
+                  <span>↗️</span> Chia sẻ
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="relative bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <span className="absolute -top-3 left-4 bg-orange-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">2</span>
-              <div className="flex items-start gap-3 pt-1">
-                <div className="p-2 bg-orange-50 text-orange-500 rounded-xl text-xl">🔍</div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-xs">Dán link & Lấy link hoàn tiền</h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Dán link vừa copy vào ô tìm kiếm trên trang này để hệ thống tính tiền hoàn.</p>
-                </div>
-              </div>
+          {/* BƯỚC 2 */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-3">
+            <p className="text-xs leading-relaxed text-slate-700">
+              <strong className="text-orange-500">Bước 2:</strong> Vào Hoàn Tiền Online, dán đường dẫn tại &quot;Dán link xem tiền hoàn&quot;.
+            </p>
+            <div className="bg-blue-50 rounded-xl p-2.5 border border-blue-100 flex items-start gap-2 text-[11px] text-blue-800">
+              <span className="text-blue-500 font-bold">💡</span>
+              <span>Hệ thống tự động tạo liên kết hoàn tiền cho bạn</span>
             </div>
 
-            <div className="relative bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <span className="absolute -top-3 left-4 bg-orange-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">3</span>
-              <div className="flex items-start gap-3 pt-1">
-                <div className="p-2 bg-orange-50 text-orange-500 rounded-xl text-xl">☑️</div>
+            <div className="rounded-xl p-3 bg-slate-50 border border-slate-200 space-y-2">
+              <div className="text-[10px] font-semibold text-slate-500 text-center">Ô Nhập Link Hoàn Tiền</div>
+              <div className="bg-white border-2 border-orange-400 p-2 rounded-lg flex items-center justify-between shadow-sm">
+                <span className="text-[11px] text-slate-400 truncate max-w-[170px]">https://shopee.vn/product/...</span>
+                <span className="bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Kiểm tra</span>
+              </div>
+            </div>
+          </div>
+
+          {/* BƯỚC 3 */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-3">
+            <p className="text-xs leading-relaxed text-slate-700">
+              <strong className="text-orange-500">Bước 3:</strong> Sau khi chuyển sang Shopee, thêm hàng vào giỏ &amp; hoàn tất thanh toán.
+            </p>
+            <div className="bg-amber-50 rounded-xl p-2.5 border border-amber-100 flex items-start gap-2 text-[11px] text-amber-800">
+              <span className="text-amber-500 font-bold">⚠️</span>
+              <span>Không nhấn vào video, livestream để tránh mất đơn hoàn tiền</span>
+            </div>
+
+            <div className="rounded-xl p-3 bg-orange-50 border border-orange-200 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-700">Tổng thanh toán:</span>
+                <span className="text-orange-600 font-bold text-sm">150.000đ</span>
+              </div>
+              <div className="w-full bg-orange-500 text-white font-bold text-center py-2 rounded-lg shadow-md text-xs">
+                ĐẶT HÀNG NGAY
+              </div>
+            </div>
+          </div>
+
+          {/* BƯỚC 4 */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-3">
+            <p className="text-xs leading-relaxed text-slate-700">
+              <strong className="text-orange-500">Bước 4:</strong> Sau khi thanh toán thành công, chờ 1-5 ngày đơn hoàn tiền được ghi nhận. Theo dõi trạng thái tại Lịch sử.
+            </p>
+            <div className="bg-blue-50 rounded-xl p-2.5 border border-blue-100 flex items-start gap-2 text-[11px] text-blue-800">
+              <span className="text-blue-500 font-bold">💡</span>
+              <span>Tiền được cộng tự động vào tài khoản</span>
+            </div>
+
+            <div className="rounded-xl p-3 bg-green-50 border border-green-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-green-500 text-white p-1.5 rounded-full text-[10px]">✓</div>
                 <div>
-                  <h3 className="font-bold text-slate-800 text-xs">Mua hàng và nhận tiền hoàn</h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Nhấn vào nút mua hàng để chuyển sang sàn. Tiền hoàn sẽ tự động ghi nhận.</p>
+                  <div className="text-xs font-bold text-slate-800">Đơn hàng Shopee</div>
+                  <div className="text-[10px] text-slate-500">Trạng thái: Chờ ghi nhận</div>
                 </div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-bold text-green-600">+12.500đ</span>
+                <div className="text-[10px] text-slate-400">Hoàn tiền</div>
               </div>
             </div>
           </div>

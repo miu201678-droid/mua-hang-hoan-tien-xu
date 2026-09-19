@@ -1,16 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Dùng giá trị dự phòng để tránh crash ứng dụng trong quá trình build trên Render
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true, // Thêm dòng này để tự động bắt token sau khi đăng nhập Google
-  },
-});
+// 1. Client cho Client-side (Trình duyệt & Đăng nhập Google)
+if (!globalThis.supabaseClientInstance) {
+  globalThis.supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+}
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+// 2. Client Admin (Tắt persistSession để KHÔNG trùng storage key với client thường)
+if (!globalThis.supabaseAdminInstance) {
+  globalThis.supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+export const supabase = globalThis.supabaseClientInstance;
+export const supabaseAdmin = globalThis.supabaseAdminInstance;
