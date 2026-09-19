@@ -54,17 +54,17 @@ export default function AdminPage() {
       if (oErr) console.error("Lỗi đơn hàng:", oErr);
       if (orderData) setOrders(orderData);
 
-      // 4. Tải Người dùng
+      // 4. Tải Người dùng (ĐÃ SỬA: Đổi từ 'users' sang 'profiles')
       const { data: userData, error: uErr } = await db
-        .from('users')
+        .from('profiles')
         .select('*')
-        .order('created_at', { ascending: false });
-      if (uErr) console.error("Lỗi users:", uErr);
+        .order('updated_at', { ascending: false });
+      if (uErr) console.error("Lỗi profiles:", uErr);
       if (userData) setUsers(userData);
 
       // 5. Tải Vòng quay
       const { data: spinData } = await db
-        .from('wheel_spins')
+        .from('spin_history') // Nếu bảng vòng quay tên là spin_history
         .select('*')
         .order('created_at', { ascending: false });
       if (spinData) setWheelSpins(spinData);
@@ -105,17 +105,17 @@ export default function AdminPage() {
 
     if (newStatus === 'completed' && item.user_id) {
       const { data: uData } = await db
-        .from('users')
-        .select('balance')
+        .from('profiles')
+        .select('balance_available')
         .eq('id', item.user_id)
         .single();
 
       if (uData) {
-        const currentBal = Number(uData.balance || 0);
+        const currentBal = Number(uData.balance_available || 0);
         const newBal = Math.max(0, currentBal - Number(item.amount));
         await db
-          .from('users')
-          .update({ balance: newBal })
+          .from('profiles')
+          .update({ balance_available: newBal })
           .eq('id', item.user_id);
       }
     }
@@ -255,7 +255,7 @@ export default function AdminPage() {
               <thead>
                 <tr className="bg-slate-100 text-slate-700 border-b">
                   <th className="p-3">Thời gian</th>
-                  <th className="p-3">User ID / Email</th>
+                  <th className="p-3">User ID</th>
                   <th className="p-3">Số tiền</th>
                   <th className="p-3">Ngân hàng & STK nhận</th>
                   <th className="p-3">Trạng thái</th>
@@ -271,12 +271,12 @@ export default function AdminPage() {
                     return (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="p-3 text-slate-500">{new Date(item.created_at).toLocaleString('vi-VN')}</td>
-                        <td className="p-3 font-semibold">{item.user_email || item.user_id}</td>
+                        <td className="p-3 font-semibold">{item.user_id}</td>
                         <td className="p-3 font-black text-orange-600">{Number(item.amount).toLocaleString('vi-VN')} đ</td>
                         <td className="p-3">
                           {bank ? (
                             <div className="space-y-0.5">
-                              <span className="font-bold text-blue-700">{bank.bank_name}</span> - <span className="font-mono font-bold text-slate-900">{bank.bank_account}</span>
+                              <span className="font-bold text-blue-700">{bank.bank_name}</span> - <span className="font-mono font-bold text-slate-900">{bank.account_number}</span>
                               <div className="text-[11px] text-slate-500 uppercase">{bank.account_name}</div>
                             </div>
                           ) : (
@@ -407,10 +407,10 @@ export default function AdminPage() {
               <thead>
                 <tr className="bg-slate-100 text-slate-700 border-b">
                   <th className="p-3">User ID</th>
-                  <th className="p-3">Email / Tên</th>
-                  <th className="p-3">Số dư ví</th>
+                  <th className="p-3">Chủ tài khoản</th>
+                  <th className="p-3">Ngân hàng & STK</th>
+                  <th className="p-3">Số dư hiện có</th>
                   <th className="p-3">Số đơn đã mua</th>
-                  <th className="p-3">Số đơn đã hủy</th>
                   <th className="p-3 text-center">Thao tác</th>
                 </tr>
               </thead>
@@ -425,11 +425,13 @@ export default function AdminPage() {
 
                     return (
                       <tr key={u.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono text-slate-500">{u.id}</td>
-                        <td className="p-3 font-bold text-slate-800">{u.email || u.username || 'Khách'}</td>
-                        <td className="p-3 font-black text-green-600">{Number(u.balance || 0).toLocaleString('vi-VN')} đ</td>
+                        <td className="p-3 font-mono text-slate-500 max-w-[120px] truncate">{u.id}</td>
+                        <td className="p-3 font-bold text-slate-800">{u.account_name || 'Khách'}</td>
+                        <td className="p-3">
+                          <span className="font-bold text-blue-600">{u.bank_name}</span> - <span className="font-mono">{u.account_number}</span>
+                        </td>
+                        <td className="p-3 font-black text-green-600">{Number(u.balance_available || 0).toLocaleString('vi-VN')} đ</td>
                         <td className="p-3 font-bold text-green-700">{userDone} đơn</td>
-                        <td className="p-3 font-bold text-red-600">{userCancel} đơn</td>
                         <td className="p-3 text-center">
                           <button
                             onClick={() => setSelectedUser({ ...u, userDone, userCancel, userOrders })}
@@ -459,9 +461,11 @@ export default function AdminPage() {
             </div>
             
             <div className="space-y-2 text-xs">
-              <div><span className="text-slate-500">Email/Tên:</span> <strong className="text-slate-800">{selectedUser.email || selectedUser.username}</strong></div>
+              <div><span className="text-slate-500">Tên tài khoản:</span> <strong className="text-slate-800">{selectedUser.account_name}</strong></div>
+              <div><span className="text-slate-500">Ngân hàng:</span> <strong>{selectedUser.bank_name} ({selectedUser.account_number})</strong></div>
               <div><span className="text-slate-500">User ID:</span> <code className="bg-slate-100 p-1 rounded">{selectedUser.id}</code></div>
-              <div><span className="text-slate-500">Số dư hiện tại:</span> <strong className="text-green-600">{Number(selectedUser.balance || 0).toLocaleString('vi-VN')} đ</strong></div>
+              <div><span className="text-slate-500">Số dư khả dụng:</span> <strong className="text-green-600">{Number(selectedUser.balance_available || 0).toLocaleString('vi-VN')} đ</strong></div>
+              <div><span className="text-slate-500">Số dư chờ duyệt:</span> <strong className="text-yellow-600">{Number(selectedUser.balance_pending || 0).toLocaleString('vi-VN')} đ</strong></div>
               <div className="flex gap-4 pt-2">
                 <div className="bg-green-50 text-green-700 p-2 rounded-xl border border-green-200 flex-1 text-center font-bold">
                   Đã mua thành công: {selectedUser.userDone} đơn
