@@ -15,6 +15,11 @@ export default function ProfilePage() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [history, setHistory] = useState([]);
 
+  // State quản lý Zalo ID nhập trực tiếp
+  const [zaloInputId, setZaloInputId] = useState('');
+  const [zaloSaving, setZaloSaving] = useState(false);
+  const [currentZaloId, setCurrentZaloId] = useState('');
+
   // State cho Modal thông báo tùy chỉnh
   const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'info' });
 
@@ -51,7 +56,7 @@ export default function ProfilePage() {
 
     let { data: profile } = await supabase
       .from('profiles')
-      .select('bank_name, account_number, account_name, balance_available, balance_pending')
+      .select('bank_name, account_number, account_name, balance_available, balance_pending, zalo_user_id')
       .eq('id', currentUser.id)
       .maybeSingle();
 
@@ -81,6 +86,7 @@ export default function ProfilePage() {
         available: profile.balance_available || 0,
         pending: profile.balance_pending || 0,
       });
+      setCurrentZaloId(profile.zalo_user_id || '');
     }
 
     const { data: txHistory } = await supabase
@@ -115,6 +121,7 @@ export default function ProfilePage() {
       } else {
         setBankInfo({ bankName: '', accountNumber: '', accountName: '' });
         setBalance({ available: 0, pending: 0 });
+        setCurrentZaloId('');
         setHistory([]);
       }
       setLoading(false);
@@ -135,6 +142,31 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+  };
+
+  // Hàm lưu Zalo ID trực tiếp vào Supabase
+  const handleSaveZaloId = async (e) => {
+    e.preventDefault();
+    if (!user) return showAlert('Chưa đăng nhập', 'Vui lòng đăng nhập trước!', 'warning');
+    if (!zaloInputId.trim()) return showAlert('Thiếu thông tin', 'Vui lòng nhập Zalo User ID của bạn!', 'warning');
+
+    setZaloSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ zalo_user_id: zaloInputId.trim() })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setCurrentZaloId(zaloInputId.trim());
+      setZaloInputId('');
+      showAlert('Thành công', '🎉 Liên kết tài khoản Zalo thành công!', 'success');
+    } catch (err) {
+      showAlert('Lỗi', err.message, 'error');
+    } finally {
+      setZaloSaving(false);
+    }
   };
 
   const handleSaveBank = async (e) => {
@@ -339,6 +371,52 @@ export default function ProfilePage() {
           >
             💳 Tạo Lệnh Rút Tiền
           </button>
+        </div>
+
+        {/* KHUNG LIÊN KẾT ZALO (NHẬP ID TRỰC TIẾP) */}
+        <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold border border-blue-100">
+              💬
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-xs">Liên Kết Zalo Nhận Thông Báo</h3>
+              <p className="text-[11px] text-slate-500">Tự động báo đơn mới & biến động số dư về Zalo</p>
+            </div>
+          </div>
+
+          {currentZaloId ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-center space-y-1">
+              <p className="text-xs text-emerald-800 font-bold">✅ Đã liên kết Zalo thành công!</p>
+              <p className="text-[10px] text-slate-500">Zalo ID: <code className="bg-white px-1.5 py-0.5 rounded font-mono text-slate-700 border">{currentZaloId}</code></p>
+            </div>
+          ) : (
+            <form onSubmit={handleSaveZaloId} className="space-y-2.5">
+              <div className="bg-blue-50/70 p-3 rounded-2xl border border-blue-100 text-[11px] text-slate-600 space-y-1">
+                <p className="font-semibold text-blue-900">Hướng dẫn lấy Zalo ID:</p>
+                <p>1. Mở Zalo và nhắn lệnh <code className="bg-white px-1 py-0.5 rounded text-blue-600 font-bold border">/id</code> cho bot.</p>
+                <p>2. Sao chép dãy số ID nhận được và dán vào ô bên dưới:</p>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nhập Zalo User ID (VD: 57803...)"
+                  value={zaloInputId}
+                  onChange={(e) => setZaloInputId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-400 font-mono"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={zaloSaving}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {zaloSaving ? 'Đang lưu...' : 'Xác Nhận'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         {/* Thông tin Ngân hàng */}
