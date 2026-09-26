@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 const ADMIN_PIN = "290102"; // Mã PIN Admin của bạn
 
@@ -19,58 +19,73 @@ export default function AdminPage() {
   // User modal detail state
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // Tải dữ liệu từ Supabase bằng supabaseAdmin (bỏ qua chặn RLS)
+  // Tải dữ liệu an toàn (Mỗi bảng xử lý độc lập)
   const fetchData = async () => {
     setLoading(true);
-    // Sử dụng client Admin nếu có, không thì dùng client thường
-    const db = supabaseAdmin || supabase;
+
+    // 1. Tải STK Ngân hàng trước
+    let bankData = [];
     try {
-      // 1. Tải Rút tiền
-      const { data: withdrawData, error: wErr } = await db
+      const { data } = await supabase.from('user_banks').select('*');
+      if (data) bankData = data;
+    } catch (e) {
+      console.error("Lỗi user_banks:", e);
+    }
+
+    // 2. Tải Rút tiền (Không xài .order để tránh 404)
+    try {
+      const { data: withdrawData, error: wErr } = await supabase
         .from('withdrawals')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (wErr) console.error("Lỗi rút tiền:", wErr);
-
-      // 2. Tải STK Ngân hàng
-      const { data: bankData } = await db
-        .from('user_banks')
         .select('*');
 
+      if (wErr) console.error("Lỗi withdrawals:", wErr);
       if (withdrawData) {
         const merged = withdrawData.map((w) => ({
           ...w,
-          bank_info: bankData?.find((b) => b.user_id === w.user_id) || null
+          bank_info: bankData.find((b) => b.user_id === w.user_id) || null
         }));
         setWithdrawals(merged);
       }
+    } catch (e) {
+      console.error("Lỗi rút tiền:", e);
+    }
 
-      // 3. Tải Đơn hàng
-      const { data: orderData, error: oErr } = await db
+    // 3. Tải Đơn hàng
+    try {
+      const { data: orderData, error: oErr } = await supabase
         .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (oErr) console.error("Lỗi đơn hàng:", oErr);
+        .select('*');
+      if (oErr) console.error("Lỗi orders:", oErr);
       if (orderData) setOrders(orderData);
+    } catch (e) {
+      console.error("Lỗi đơn hàng:", e);
+    }
 
-      // 4. Tải Người dùng (ĐÃ SỬA: Đổi từ 'users' sang 'profiles')
-      const { data: userData, error: uErr } = await db
+    // 4. Tải Người dùng từ bảng 'profiles'
+    try {
+      const { data: userData, error: uErr } = await supabase
         .from('profiles')
-        .select('*')
-        .order('updated_at', { ascending: false });
-      if (uErr) console.error("Lỗi profiles:", uErr);
-      if (userData) setUsers(userData);
+        .select('*');
+      
+      if (uErr) {
+        console.error("Lỗi profiles:", uErr);
+      } else if (userData) {
+        console.log("Dữ liệu profiles tải thành công:", userData);
+        setUsers(userData);
+      }
+    } catch (e) {
+      console.error("Lỗi profiles:", e);
+    }
 
-      // 5. Tải Vòng quay
-      const { data: spinData } = await db
-        .from('spin_history') // Nếu bảng vòng quay tên là spin_history
-        .select('*')
-        .order('created_at', { ascending: false });
+    // 5. Tải Vòng quay
+    try {
+      const { data: spinData, error: sErr } = await supabase
+        .from('spin_history')
+        .select('*');
+      if (sErr) console.error("Lỗi spin_history:", sErr);
       if (spinData) setWheelSpins(spinData);
-
-    } catch (error) {
-      console.error("Lỗi khi tải dữ liệu Admin:", error);
+    } catch (e) {
+      console.error("Lỗi vòng quay:", e);
     } finally {
       setLoading(false);
     }
@@ -92,8 +107,7 @@ export default function AdminPage() {
   };
 
   const handleUpdateWithdrawStatus = async (item, newStatus) => {
-    const db = supabaseAdmin || supabase;
-    const { error } = await db
+    const { error } = await supabase
       .from('withdrawals')
       .update({ status: newStatus })
       .eq('id', item.id);
@@ -104,7 +118,7 @@ export default function AdminPage() {
     }
 
     if (newStatus === 'completed' && item.user_id) {
-      const { data: uData } = await db
+      const { data: uData } = await supabase
         .from('profiles')
         .select('balance_available')
         .eq('id', item.user_id)
@@ -113,7 +127,7 @@ export default function AdminPage() {
       if (uData) {
         const currentBal = Number(uData.balance_available || 0);
         const newBal = Math.max(0, currentBal - Number(item.amount));
-        await db
+        await supabase
           .from('profiles')
           .update({ balance_available: newBal })
           .eq('id', item.user_id);
@@ -125,8 +139,7 @@ export default function AdminPage() {
   };
 
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
-    const db = supabaseAdmin || supabase;
-    const { error } = await db
+    const { error } = await supabase
       .from('orders')
       .update({ status: newStatus })
       .eq('id', orderId);
@@ -268,11 +281,12 @@ export default function AdminPage() {
                 ) : (
                   withdrawals.map((item) => {
                     const bank = item.bank_info;
+                    const dateStr = item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : 'N/A';
                     return (
                       <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="p-3 text-slate-500">{new Date(item.created_at).toLocaleString('vi-VN')}</td>
+                        <td className="p-3 text-slate-500">{dateStr}</td>
                         <td className="p-3 font-semibold">{item.user_id}</td>
-                        <td className="p-3 font-black text-orange-600">{Number(item.amount).toLocaleString('vi-VN')} đ</td>
+                        <td className="p-3 font-black text-orange-600">{Number(item.amount || 0).toLocaleString('vi-VN')} đ</td>
                         <td className="p-3">
                           {bank ? (
                             <div className="space-y-0.5">
@@ -388,7 +402,7 @@ export default function AdminPage() {
                 ) : (
                   wheelSpins.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50">
-                      <td className="p-3 text-slate-500">{new Date(s.created_at).toLocaleString('vi-VN')}</td>
+                      <td className="p-3 text-slate-500">{s.created_at ? new Date(s.created_at).toLocaleString('vi-VN') : 'N/A'}</td>
                       <td className="p-3 font-semibold">{s.user_id}</td>
                       <td className="p-3 font-bold text-slate-800">{s.prize_label || 'Tiền thưởng'}</td>
                       <td className="p-3 font-black text-purple-600">+{Number(s.prize_amount || 0).toLocaleString('vi-VN')} đ</td>
@@ -428,7 +442,7 @@ export default function AdminPage() {
                         <td className="p-3 font-mono text-slate-500 max-w-[120px] truncate">{u.id}</td>
                         <td className="p-3 font-bold text-slate-800">{u.account_name || 'Khách'}</td>
                         <td className="p-3">
-                          <span className="font-bold text-blue-600">{u.bank_name}</span> - <span className="font-mono">{u.account_number}</span>
+                          <span className="font-bold text-blue-600">{u.bank_name || 'Chưa chọn'}</span> - <span className="font-mono">{u.account_number || 'N/A'}</span>
                         </td>
                         <td className="p-3 font-black text-green-600">{Number(u.balance_available || 0).toLocaleString('vi-VN')} đ</td>
                         <td className="p-3 font-bold text-green-700">{userDone} đơn</td>

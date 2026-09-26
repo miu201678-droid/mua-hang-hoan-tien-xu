@@ -2,9 +2,11 @@
 import Link from 'next/link';
 
 export default function BottomNav({ active = 'home' }) {
+  const isOrdersActive = active === 'orders' || active === 'don-hang';
+
   return (
-    <div className="fixed bottom-4 left-0 right-0 z-30 flex justify-center px-4">
-      <nav className="bg-white/95 backdrop-blur border border-slate-200 rounded-full shadow-xl flex items-center justify-around px-4 py-2 w-full max-w-md">
+    <div className="fixed bottom-4 left-0 right-0 z-30 flex justify-center px-2 sm:px-4">
+      <nav className="bg-white/95 backdrop-blur border border-slate-200 rounded-full shadow-xl flex items-center justify-around px-2 py-2 w-full max-w-md">
         
         {/* 1. Trang chủ */}
         <Link href="/" className={`flex flex-col items-center flex-1 transition ${active === 'home' ? 'text-orange-500 font-bold' : 'text-slate-700 hover:text-orange-500'}`}>
@@ -14,7 +16,7 @@ export default function BottomNav({ active = 'home' }) {
           <span className="text-[10px] mt-1">Trang chủ</span>
         </Link>
 
-        <div className="h-5 w-[1px] bg-slate-200 mx-1"></div>
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5"></div>
 
         {/* 2. Voucher */}
         <a href="https://s.shopee.vn/4AzXOAbszD" target="_blank" rel="noreferrer" className="flex flex-col items-center flex-1 text-slate-700 hover:text-orange-500 transition">
@@ -24,7 +26,7 @@ export default function BottomNav({ active = 'home' }) {
           <span className="text-[10px] font-bold mt-1">Voucher</span>
         </a>
 
-        <div className="h-5 w-[1px] bg-slate-200 mx-1"></div>
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5"></div>
 
         {/* 3. Hoàn tiền (Nút tròn nổi ở giữa) */}
         <div className="relative flex-1 flex justify-center">
@@ -36,9 +38,19 @@ export default function BottomNav({ active = 'home' }) {
           </Link>
         </div>
 
-        <div className="h-5 w-[1px] bg-slate-200 mx-1"></div>
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5"></div>
 
-        {/* 4. Rút tiền */}
+        {/* 4. Đơn hàng (Mới thêm) */}
+        <Link href="/don-hang" className={`flex flex-col items-center flex-1 transition ${isOrdersActive ? 'text-orange-500 font-bold' : 'text-slate-700 hover:text-orange-500'}`}>
+          <svg className={`w-5 h-5 ${isOrdersActive ? 'text-orange-500' : 'text-slate-700'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <span className="text-[10px] mt-1">Đơn hàng</span>
+        </Link>
+
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5"></div>
+
+        {/* 5. Rút tiền */}
         <Link href="/withdraw" className={`flex flex-col items-center flex-1 transition ${active === 'withdraw' ? 'text-orange-500 font-bold' : 'text-slate-700 hover:text-orange-500'}`}>
           <svg className={`w-5 h-5 ${active === 'withdraw' ? 'text-orange-500' : 'text-slate-700'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -46,9 +58,9 @@ export default function BottomNav({ active = 'home' }) {
           <span className="text-[10px] mt-1">Rút tiền</span>
         </Link>
 
-        <div className="h-5 w-[1px] bg-slate-200 mx-1"></div>
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5"></div>
 
-        {/* 5. Tài khoản */}
+        {/* 6. Tài khoản */}
         <Link href="/profile" className={`flex flex-col items-center flex-1 transition ${active === 'profile' ? 'text-orange-500 font-bold' : 'text-slate-700 hover:text-orange-500'}`}>
           <svg className={`w-5 h-5 ${active === 'profile' ? 'text-orange-500' : 'text-slate-700'}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
