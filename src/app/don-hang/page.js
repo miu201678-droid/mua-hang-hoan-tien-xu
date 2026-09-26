@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import BottomNav from '@/components/BottomNav'; // điều chỉnh đường dẫn tới file BottomNav của bạn
+import BottomNav from '@/components/BottomNav';
 
 export default function DonHangPage() {
   const [orders, setOrders] = useState([]);
@@ -79,7 +79,6 @@ export default function DonHangPage() {
         </div>
       )}
 
-      {/* Gọi thanh BottomNav với tab active là orders */}
       <BottomNav active="orders" />
     </div>
   );
