@@ -14,19 +14,25 @@ export default function DonHangPage() {
   useEffect(() => {
     async function fetchOrders() {
       try {
-        // Lấy danh sách đơn hàng từ bảng cashback_orders (hoặc tên bảng hoàn tiền của bạn)
-        const { data, error } = await supabase
-          .from('cashback_orders')
+        // Thử lấy từ bảng 'orders' trước, nếu không có dữ liệu sẽ thử sang 'cashback_orders'
+        let { data, error } = await supabase
+          .from('orders')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Lỗi lấy đơn hàng:', error);
-        } else if (data) {
+        if ((!data || data.length === 0) && !error) {
+          const res = await supabase
+            .from('cashback_orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+          data = res.data;
+        }
+
+        if (data) {
           setOrders(data);
         }
       } catch (err) {
-        console.error('Exception:', err);
+        console.error('Lỗi tải đơn hàng:', err);
       } finally {
         setLoading(false);
       }
@@ -36,7 +42,7 @@ export default function DonHangPage() {
   }, []);
 
   return (
-    <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: '900px', margin: '40px auto', padding: '20px', fontFamily: 'sans-serif' }}>
       <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px', color: '#1e293b' }}>
         📦 Lịch Sử Hoàn Tiền Đơn Hàng
       </h2>
@@ -45,43 +51,51 @@ export default function DonHangPage() {
         <p style={{ color: '#64748b' }}>Đang tải danh sách đơn hàng...</p>
       ) : orders.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-          <p style={{ color: '#64748b', fontSize: '16px' }}>Bạn chưa có đơn hàng mua sắm nào được ghi nhận trong cơ sở dữ liệu.</p>
+          <p style={{ color: '#64748b', fontSize: '16px' }}>Chưa có đơn hàng nào được ghi nhận trong cơ sở dữ liệu.</p>
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <thead>
-            <tr style={{ background: '#f1f5f9', textAlign: 'left', color: '#475569', fontSize: '14px' }}>
-              <th style={{ padding: '12px' }}>Mã đơn hàng</th>
-              <th style={{ padding: '12px' }}>Tiền hoàn</th>
-              <th style={{ padding: '12px' }}>Trạng thái</th>
-              <th style={{ padding: '12px' }}>Thời gian</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((item, index) => (
-              <tr key={item.id || index} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: '500' }}>{item.order_id || item.id}</td>
-                <td style={{ padding: '12px', color: '#d97706', fontWeight: 'bold' }}>
-                  {Number(item.cashback_amount || item.amount || 0).toLocaleString('vi-VN')} đ
-                </td>
-                <td style={{ padding: '12px' }}>
-                  <span style={{ 
-                    padding: '4px 8px', 
-                    borderRadius: '4px', 
-                    fontSize: '12px',
-                    background: item.status === 1 ? '#dcfce7' : '#fef3c7',
-                    color: item.status === 1 ? '#166534' : '#92400e'
-                  }}>
-                    {item.status === 1 ? 'Đã duyệt' : 'Đang xử lý'}
-                  </span>
-                </td>
-                <td style={{ padding: '12px', color: '#64748b', fontSize: '12px' }}>
-                  {item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : 'N/A'}
-                </td>
+        <div style={{ background: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9', color: '#475569', fontSize: '14px' }}>
+                <th style={{ padding: '12px' }}>Mã đơn hàng</th>
+                <th style={{ padding: '12px' }}>Thành viên</th>
+                <th style={{ padding: '12px' }}>Tiền hoàn</th>
+                <th style={{ padding: '12px' }}>Trạng thái</th>
+                <th style={{ padding: '12px' }}>Thời gian</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {orders.map((item, index) => (
+                <tr key={item.id || index} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                  <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: '500' }}>
+                    {item.order_id || item.madon || item.id}
+                  </td>
+                  <td style={{ padding: '12px', color: '#334155' }}>
+                    {item.thanhvien || item.username || item.user_id || 'N/A'}
+                  </td>
+                  <td style={{ padding: '12px', color: '#d97706', fontWeight: 'bold' }}>
+                    {Number(item.cashback_amount || item.hoanhong || item.amount || 0).toLocaleString('vi-VN')} đ
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: '4px', 
+                      fontSize: '12px',
+                      background: (item.status === 1 || item.trangthai === '1') ? '#dcfce7' : '#fef3c7',
+                      color: (item.status === 1 || item.trangthai === '1') ? '#166534' : '#92400e'
+                    }}>
+                      {(item.status === 1 || item.trangthai === '1') ? 'Đã duyệt' : 'Đang xử lý'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', color: '#64748b', fontSize: '12px' }}>
+                    {item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       
       <div style={{ marginTop: '30px' }}>
