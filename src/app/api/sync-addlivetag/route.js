@@ -1,106 +1,106 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Link chia sẻ dữ liệu công khai từ Addlivetag (xuất ra dạng JSON)
-const ADDLIVETAG_SHARE_URL = 'https://addlivetag.com/tool/conversion/zalo-share.php?t=75f92463dd1564ed8f1375d37c3621d3&export=json';
+// Link chia sẻ dữ liệu live từ Addlivetag của bạn
+const SHARE_URL = 'https://addlivetag.com/tool/conversion/zalo-share.php?t=75f92463dd1564ed8f1375d37c3621d3';
 
 async function handleSync(request) {
   try {
-    const { searchParams } = new URL(request.url);
-
-    // 1. Đọc dữ liệu nếu có request POST/GET gửi tới dạng Webhook
-    let body = {};
-    if (request.method === 'POST') {
-      const contentType = request.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        body = await request.json().catch(() => ({}));
-      } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-        const formData = await request.formData().catch(() => new Map());
-        body = Object.fromEntries(formData.entries());
+    // 1. Tự động gửi request kéo HTML trực tiếp từ Addlivetag
+    const res = await fetch(SHARE_URL, {
+      cache: 'no-store',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
+    });
+
+    if (!res.ok) {
+      throw new Error(`Không thể kết nối Addlivetag (Mã lỗi: ${res.status})`);
     }
 
-    const singleOrderId = 
-      searchParams.get('orderCode') || searchParams.get('order_code') || searchParams.get('order_id') ||
-      body.orderCode || body.order_code || body.order_id || null;
+    const htmlText = await res.text();
 
-    // TH 1: Bắn đơn lẻ từ Webhook (Nếu Addlivetag gọi tới)
-    if (singleOrderId) {
-      const finalUserId = 
-        searchParams.get('sub1') || searchParams.get('sub_id') || searchParams.get('uid') ||
-        body.sub1 || body.sub_id || body.userId || body.uid || 'N/A';
+    // 2. Tự động quét và bóc tách bảng dữ liệu HTML thời gian thực (100% Dynamic)
+    const ordersToInsert = [];
+    const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch;
 
-      const rawCommission = searchParams.get('commission') || body.commission || 0;
-      const rawStatus = searchParams.get('status') || body.status || '0';
+    while ((trMatch = trRegex.exec(htmlText)) !== null) {
+      const rowHtml = trMatch[1];
+      const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      const cells = [];
+      let tdMatch;
 
-      let statusInt = 0;
-      if (rawStatus === 'completed' || rawStatus === '1' || rawStatus === 1) statusInt = 1;
-      else if (rawStatus === 'canceled' || rawStatus === '2' || rawStatus === 2) statusInt = 2;
-      else statusInt = Number(rawStatus) || 0;
+      while ((tdMatch = tdRegex.exec(rowHtml)) !== null) {
+        const rawCell = tdMatch[1];
+        const textContent = rawCell
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        
+        cells.push(textContent);
+      }
 
-      const { data, error } = await supabaseAdmin
-        .from('cashback_orders')
-        .upsert(
-          [{ 
-            order_id: singleOrderId, 
-            user_id: finalUserId, 
-            total_price: 0, 
-            cashback_amount: Number(rawCommission || 0), 
-            status: statusInt 
-          }],
-          { onConflict: 'order_id' }
-        )
-        .select();
+      // Bóc tách theo cấu trúc cột thực tế của Addlivetag
+      if (cells.length >= 6) {
+        const orderIdText = cells[2]?.trim() || ''; // Cột Mã đơn
+        const userLines = cells[3]?.split('\n') || [];
+        const userId = userLines[0]?.trim() || 'N/A'; // Cột Thành viên (Lấy dòng tên trên cùng)
 
-      if (error) throw error;
-      return NextResponse.json({ success: true, message: 'Đã lưu đơn hàng từ Webhook', data: data?.[0] });
-    }
+        const commissionText = cells[5] || ''; // Cột Hoa hồng
+        const rawNum = commissionText.replace(/[^\d]/g, '');
+        const cashbackAmount = rawNum ? Number(rawNum) : 0;
 
-    // TH 2: Tự động chủ động kéo toàn bộ danh sách đơn hàng từ Link chia sẻ của Addlivetag
-    const res = await fetch(ADDLIVETAG_SHARE_URL, { cache: 'no-store' });
-    const listData = await res.json().catch(() => []);
+        // Phân loại trạng thái đơn hàng (0: Chờ xử lý, 1: Đã duyệt, 2: Đã hủy)
+        const rowTextLower = rowHtml.toLowerCase();
+        let statusInt = 0;
+        if (rowTextLower.includes('đã duyệt') || rowTextLower.includes('thành công')) {
+          statusInt = 1;
+        } else if (rowTextLower.includes('huỷ') || rowTextLower.includes('không hợp lệ')) {
+          statusInt = 2;
+        } else if (rowTextLower.includes('đang xử lý') || rowTextLower.includes('chờ xử lý')) {
+          statusInt = 0;
+        }
 
-    if (Array.isArray(listData) && listData.length > 0) {
-      const formattedOrders = listData
-        .map(item => {
-          // Xử lý trạng thái: 0 = Đang xử lý, 1 = Đã duyệt, 2 = Đã hủy / Không hợp lệ
-          let statusInt = 0;
-          const statusText = String(item.trangthai || item.status || '').toLowerCase();
-          if (statusText.includes('duyệt') || statusText.includes('thành công') || statusText === '1') {
-            statusInt = 1;
-          } else if (statusText.includes('huỷ') || statusText.includes('không hợp lệ') || statusText === '2') {
-            statusInt = 2;
-          }
-
-          return {
-            order_id: item.madon || item.order_id || item.orderCode,
-            user_id: item.thanhvien || item.subid || item.sub1 || 'N/A',
-            total_price: Number(item.giatri || item.total_price || 0),
-            cashback_amount: Number(item.hoanhong || item.commission || 0),
+        // Lọc loại bỏ dòng tiêu đề
+        if (orderIdText && orderIdText !== 'MÃ ĐƠN' && orderIdText.length >= 6) {
+          ordersToInsert.push({
+            order_id: orderIdText,
+            user_id: userId,
+            total_price: 0,
+            cashback_amount: cashbackAmount,
             status: statusInt
-          };
-        })
-        .filter(item => item.order_id);
-
-      if (formattedOrders.length > 0) {
-        const { data, error } = await supabaseAdmin
-          .from('cashback_orders')
-          .upsert(formattedOrders, { onConflict: 'order_id' })
-          .select();
-
-        if (error) throw error;
-        return NextResponse.json({
-          success: true,
-          message: `Đã đồng bộ thành công ${data?.length || 0} đơn hàng từ Addlivetag về Supabase!`,
-          data
-        });
+          });
+        }
       }
     }
 
-    return NextResponse.json({ success: true, message: 'Không tìm thấy đơn hàng mới nào trên Addlivetag' });
+    if (ordersToInsert.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'Đã quét trang Addlivetag nhưng hiện chưa có đơn hàng nào phát sinh.',
+        data: []
+      });
+    }
+
+    // 3. Lưu toàn bộ dữ liệu quét được vào Supabase
+    const { data, error } = await supabaseAdmin
+      .from('cashback_orders')
+      .upsert(ordersToInsert, { onConflict: 'order_id' })
+      .select();
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Tự động quét thành công ${data?.length || 0} đơn hàng live từ Addlivetag!`,
+      data
+    });
 
   } catch (error) {
-    console.error('❌ Lỗi hệ thống API Route:', error);
+    console.error('❌ Lỗi quét dữ liệu Addlivetag:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
