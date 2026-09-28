@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// API Key chính từ Addlivetag
-const ADDLIVETAG_API_KEY = '7a1ad8b3615723c92efb44ba55b4bbc45f7058a7cad0795e';
+// Link chia sẻ dữ liệu công khai từ Addlivetag (xuất ra dạng JSON)
+const ADDLIVETAG_SHARE_URL = 'https://addlivetag.com/tool/conversion/zalo-share.php?t=75f92463dd1564ed8f1375d37c3621d3&export=json';
 
 async function handleSync(request) {
   try {
@@ -41,7 +41,13 @@ async function handleSync(request) {
       const { data, error } = await supabaseAdmin
         .from('cashback_orders')
         .upsert(
-          [{ order_id: singleOrderId, user_id: finalUserId, total_price: 0, cashback_amount: Number(rawCommission || 0), status: statusInt }],
+          [{ 
+            order_id: singleOrderId, 
+            user_id: finalUserId, 
+            total_price: 0, 
+            cashback_amount: Number(rawCommission || 0), 
+            status: statusInt 
+          }],
           { onConflict: 'order_id' }
         )
         .select();
@@ -50,20 +56,30 @@ async function handleSync(request) {
       return NextResponse.json({ success: true, message: 'Đã lưu đơn hàng từ Webhook', data: data?.[0] });
     }
 
-    // TH 2: Tự động chủ động gọi sang Addlivetag lấy toàn bộ danh sách đơn hàng về
-    const apiUrl = `https://addlivetag.com/tool/conversion/zalo.php?export=json&key=${ADDLIVETAG_API_KEY}`;
-    const res = await fetch(apiUrl, { cache: 'no-store' });
+    // TH 2: Tự động chủ động kéo toàn bộ danh sách đơn hàng từ Link chia sẻ của Addlivetag
+    const res = await fetch(ADDLIVETAG_SHARE_URL, { cache: 'no-store' });
     const listData = await res.json().catch(() => []);
 
     if (Array.isArray(listData) && listData.length > 0) {
       const formattedOrders = listData
-        .map(item => ({
-          order_id: item.madon || item.order_id || item.orderCode,
-          user_id: item.thanhvien || item.subid || item.sub1 || 'N/A',
-          total_price: Number(item.giatri || 0),
-          cashback_amount: Number(item.hoanhong || item.commission || 0),
-          status: item.trangthai === 'Đang xử lý' ? 0 : item.trangthai === 'Đã duyệt' ? 1 : 0
-        }))
+        .map(item => {
+          // Xử lý trạng thái: 0 = Đang xử lý, 1 = Đã duyệt, 2 = Đã hủy / Không hợp lệ
+          let statusInt = 0;
+          const statusText = String(item.trangthai || item.status || '').toLowerCase();
+          if (statusText.includes('duyệt') || statusText.includes('thành công') || statusText === '1') {
+            statusInt = 1;
+          } else if (statusText.includes('huỷ') || statusText.includes('không hợp lệ') || statusText === '2') {
+            statusInt = 2;
+          }
+
+          return {
+            order_id: item.madon || item.order_id || item.orderCode,
+            user_id: item.thanhvien || item.subid || item.sub1 || 'N/A',
+            total_price: Number(item.giatri || item.total_price || 0),
+            cashback_amount: Number(item.hoanhong || item.commission || 0),
+            status: statusInt
+          };
+        })
         .filter(item => item.order_id);
 
       if (formattedOrders.length > 0) {
