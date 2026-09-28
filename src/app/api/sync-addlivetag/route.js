@@ -1,76 +1,106 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Link chia sẻ dữ liệu live từ Addlivetag của bạn
 const SHARE_URL = 'https://addlivetag.com/tool/conversion/zalo-share.php?t=75f92463dd1564ed8f1375d37c3621d3';
+const API_KEY_URL = 'https://addlivetag.com/tool/conversion/zalo.php?export=json&key=7a1ad8b3615723c92efb44ba55b4bbc45f7058a7cad0795e';
 
 async function handleSync(request) {
   try {
-    // 1. Tự động gửi request kéo HTML trực tiếp từ Addlivetag
-    const res = await fetch(SHARE_URL, {
-      cache: 'no-store',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
+    let responseText = '';
+    let fetchSuccess = false;
 
-    if (!res.ok) {
-      throw new Error(`Không thể kết nối Addlivetag (Mã lỗi: ${res.status})`);
+    // Danh sách đường dẫn dự phòng (tự động thử nếu một link báo 404)
+    const urlsToTry = [SHARE_URL, API_KEY_URL];
+
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'vi,vi-VN;q=0.9,en-US;q=0.8'
+          }
+        });
+
+        if (res.ok) {
+          responseText = await res.text();
+          fetchSuccess = true;
+          break;
+        }
+      } catch (e) {
+        console.log('Thử đường dẫn thất bại, đang chuyển đường dẫn tiếp theo...', url);
+      }
     }
 
-    const htmlText = await res.text();
+    if (!fetchSuccess || !responseText) {
+      return NextResponse.json({
+        success: false,
+        error: 'Chưa thể kết nối tới Addlivetag. Vui lòng kiểm tra lại trạng thái máy chủ Addlivetag.'
+      }, { status: 500 });
+    }
 
-    // 2. Tự động quét và bóc tách bảng dữ liệu HTML thời gian thực (100% Dynamic)
     const ordersToInsert = [];
-    const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let trMatch;
 
-    while ((trMatch = trRegex.exec(htmlText)) !== null) {
-      const rowHtml = trMatch[1];
-      const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-      const cells = [];
-      let tdMatch;
+    // 1. Trường hợp Addlivetag trả về dữ liệu JSON
+    try {
+      const json = JSON.parse(responseText);
+      if (Array.isArray(json) && json.length > 0) {
+        for (const item of json) {
+          const orderId = String(item.madon || item.order_id || item.orderCode || '');
+          if (orderId) {
+            const statusText = String(item.trangthai || item.status || '').toLowerCase();
+            let statusInt = 0;
+            if (statusText.includes('duyệt') || statusText.includes('thành công') || statusText === '1') statusInt = 1;
+            else if (statusText.includes('huỷ') || statusText.includes('hủy') || statusText.includes('không hợp lệ') || statusText === '2') statusInt = 2;
 
-      while ((tdMatch = tdRegex.exec(rowHtml)) !== null) {
-        const rawCell = tdMatch[1];
-        const textContent = rawCell
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]+>/g, '')
-          .trim();
-        
-        cells.push(textContent);
-      }
-
-      // Bóc tách theo cấu trúc cột thực tế của Addlivetag
-      if (cells.length >= 6) {
-        const orderIdText = cells[2]?.trim() || ''; // Cột Mã đơn
-        const userLines = cells[3]?.split('\n') || [];
-        const userId = userLines[0]?.trim() || 'N/A'; // Cột Thành viên (Lấy dòng tên trên cùng)
-
-        const commissionText = cells[5] || ''; // Cột Hoa hồng
-        const rawNum = commissionText.replace(/[^\d]/g, '');
-        const cashbackAmount = rawNum ? Number(rawNum) : 0;
-
-        // Phân loại trạng thái đơn hàng (0: Chờ xử lý, 1: Đã duyệt, 2: Đã hủy)
-        const rowTextLower = rowHtml.toLowerCase();
-        let statusInt = 0;
-        if (rowTextLower.includes('đã duyệt') || rowTextLower.includes('thành công')) {
-          statusInt = 1;
-        } else if (rowTextLower.includes('huỷ') || rowTextLower.includes('không hợp lệ')) {
-          statusInt = 2;
-        } else if (rowTextLower.includes('đang xử lý') || rowTextLower.includes('chờ xử lý')) {
-          statusInt = 0;
+            ordersToInsert.push({
+              order_id: orderId,
+              user_id: String(item.thanhvien || item.subid || 'N/A'),
+              total_price: Number(item.giatri || 0),
+              cashback_amount: Number(item.hoanhong || item.commission || 0),
+              status: statusInt
+            });
+          }
         }
+      }
+    } catch (jsonErr) {
+      // 2. Trường hợp Addlivetag trả về giao diện Bảng HTML -> Bóc tách dữ liệu tự động
+      const rowMatches = [...responseText.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
 
-        // Lọc loại bỏ dòng tiêu đề
-        if (orderIdText && orderIdText !== 'MÃ ĐƠN' && orderIdText.length >= 6) {
-          ordersToInsert.push({
-            order_id: orderIdText,
-            user_id: userId,
-            total_price: 0,
-            cashback_amount: cashbackAmount,
-            status: statusInt
-          });
+      for (const rowMatch of rowMatches) {
+        const rowContent = rowMatch[1];
+        const cells = [...rowContent.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => 
+          m[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim()
+        );
+
+        if (cells.length >= 5) {
+          // Tìm ô chứa mã đơn hàng
+          const orderId = cells.find(c => /^[A-Z0-9]{8,}$/i.test(c.replace(/\s+/g, ''))) || '';
+          
+          if (orderId && !orderId.includes('MÃ ĐƠN')) {
+            // Lấy tên thành viên (User ID)
+            const userLines = (cells[3] || '').split('\n');
+            const cleanUserId = userLines[0].trim() || 'N/A';
+
+            // Lấy tiền hoa hồng
+            const commCell = cells.find(c => c.includes('đ') || /[\d\.,]+\s*đ/.test(c)) || '0';
+            const cashbackAmount = Number(commCell.replace(/[^\d]/g, '')) || 0;
+
+            // Xác định trạng thái đơn
+            const rowLower = rowContent.toLowerCase();
+            let statusInt = 0;
+            if (rowLower.includes('đã duyệt') || rowLower.includes('thành công')) statusInt = 1;
+            else if (rowLower.includes('huỷ') || rowLower.includes('hủy') || rowLower.includes('không hợp lệ')) statusInt = 2;
+
+            ordersToInsert.push({
+              order_id: orderId,
+              user_id: cleanUserId,
+              total_price: 0,
+              cashback_amount: cashbackAmount,
+              status: statusInt
+            });
+          }
         }
       }
     }
@@ -78,37 +108,30 @@ async function handleSync(request) {
     if (ordersToInsert.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'Đã quét trang Addlivetag nhưng hiện chưa có đơn hàng nào phát sinh.',
+        message: 'Đã kết nối thành công tới Addlivetag nhưng chưa có đơn hàng mới nào.',
         data: []
       });
     }
 
-    // 3. Lưu toàn bộ dữ liệu quét được vào Supabase
+    // 3. Cập nhật dữ liệu bóc tách được vào Supabase
     const { data, error } = await supabaseAdmin
       .from('cashback_orders')
       .upsert(ordersToInsert, { onConflict: 'order_id' })
       .select();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return NextResponse.json({
       success: true,
-      message: `Tự động quét thành công ${data?.length || 0} đơn hàng live từ Addlivetag!`,
+      message: `Đã tự động quét và cập nhật ${data?.length || 0} đơn hàng live từ Addlivetag!`,
       data
     });
 
   } catch (error) {
-    console.error('❌ Lỗi quét dữ liệu Addlivetag:', error);
+    console.error('❌ Lỗi hệ thống API Route:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function GET(request) {
-  return handleSync(request);
-}
-
-export async function POST(request) {
-  return handleSync(request);
-}
+export async function GET(request) { return handleSync(request); }
+export async function POST(request) { return handleSync(request); }
