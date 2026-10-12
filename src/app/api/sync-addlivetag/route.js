@@ -70,7 +70,7 @@ async function handleSync() {
 
     const ordersToInsert = [];
 
-    // Trường hợp 1: Có dữ liệu JSON từ API -> Chuẩn hóa dữ liệu
+    // Trường hợp 1: Có dữ liệu JSON từ API -> Chuẩn hóa dữ liệu khớp với bảng 'orders'
     if (rawData && Array.isArray(rawData)) {
       for (const item of rawData) {
         const orderId = String(item.madon || item.order_id || item.orderCode || '').trim();
@@ -83,8 +83,8 @@ async function handleSync() {
           ordersToInsert.push({
             order_id: orderId,
             user_id: String(item.thanhvien || item.subid || 'N/A').trim(),
-            total_price: Number(item.giatri || 0),
-            cashback_amount: Number(item.hoanhong || 0),
+            amount: Number(item.giatri || 0),
+            commission: Number(item.hoanhong || 0),
             status: statusInt
           });
         }
@@ -140,8 +140,8 @@ async function handleSync() {
             ordersToInsert.push({
               order_id: orderId,
               user_id: userId,
-              total_price: 0,
-              cashback_amount: cashback,
+              amount: 0,
+              commission: cashback,
               status: statusInt
             });
           }
@@ -157,16 +157,16 @@ async function handleSync() {
       });
     }
 
-    // Lọc trùng đơn hàng
+    // Lọc trùng đơn hàng theo order_id
     const uniqueMap = new Map();
     for (const ord of ordersToInsert) {
       if (!uniqueMap.has(ord.order_id)) uniqueMap.set(ord.order_id, ord);
     }
     const finalOrders = Array.from(uniqueMap.values());
 
-    // 3. Cập nhật vào Supabase
+    // 3. Cập nhật vào đúng bảng 'orders' của Supabase
     const { data, error } = await supabaseAdmin
-      .from('cashback_orders')
+      .from('orders')
       .upsert(finalOrders, { onConflict: 'order_id' })
       .select();
 

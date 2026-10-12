@@ -19,9 +19,18 @@ export default function AdminPage() {
   // User modal detail state
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // Tải dữ liệu an toàn (Mỗi bảng xử lý độc lập)
+  // Tải dữ liệu an toàn kết hợp đồng bộ Addlivetag
   const fetchData = async () => {
     setLoading(true);
+
+    // 0. GỌI API ĐỒNG BỘ TỪ ADDLIVETAG VỀ SUPABASE TRƯỚC
+    try {
+      const syncRes = await fetch('/api/sync-addlivetag');
+      const syncResult = await syncRes.json();
+      console.log("Kết quả đồng bộ từ Addlivetag:", syncResult);
+    } catch (e) {
+      console.error("Lỗi khi gọi API sync-addlivetag:", e);
+    }
 
     // 1. Tải STK Ngân hàng trước
     let bankData = [];
@@ -32,7 +41,7 @@ export default function AdminPage() {
       console.error("Lỗi user_banks:", e);
     }
 
-    // 2. Tải Rút tiền (Không xài .order để tránh 404)
+    // 2. Tải Rút tiền
     try {
       const { data: withdrawData, error: wErr } = await supabase
         .from('withdrawals')
@@ -70,7 +79,6 @@ export default function AdminPage() {
       if (uErr) {
         console.error("Lỗi profiles:", uErr);
       } else if (userData) {
-        console.log("Dữ liệu profiles tải thành công:", userData);
         setUsers(userData);
       }
     } catch (e) {
@@ -290,7 +298,7 @@ export default function AdminPage() {
                         <td className="p-3">
                           {bank ? (
                             <div className="space-y-0.5">
-                              <span className="font-bold text-blue-700">{bank.bank_name}</span> - <span className="font-mono font-bold text-slate-900">{bank.account_number}</span>
+                              <span className="font-bold text-blue-700">{bank.bank_name}</span> <span className="font-mono font-bold text-slate-900">{bank.account_number}</span>
                               <div className="text-[11px] text-slate-500 uppercase">{bank.account_name}</div>
                             </div>
                           ) : (
@@ -442,7 +450,7 @@ export default function AdminPage() {
                         <td className="p-3 font-mono text-slate-500 max-w-[120px] truncate">{u.id}</td>
                         <td className="p-3 font-bold text-slate-800">{u.account_name || 'Khách'}</td>
                         <td className="p-3">
-                          <span className="font-bold text-blue-600">{u.bank_name || 'Chưa chọn'}</span> - <span className="font-mono">{u.account_number || 'N/A'}</span>
+                          <span className="font-bold text-blue-600">{u.bank_name || 'Chưa chọn'}</span> <span className="font-mono">{u.account_number || 'N/A'}</span>
                         </td>
                         <td className="p-3 font-black text-green-600">{Number(u.balance_available || 0).toLocaleString('vi-VN')} đ</td>
                         <td className="p-3 font-bold text-green-700">{userDone} đơn</td>
