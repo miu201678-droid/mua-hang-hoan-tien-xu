@@ -14,31 +14,39 @@ async function handleSync() {
     let rawData = null;
     let htmlContent = '';
 
-    // 1. Lần lượt thử lấy dữ liệu qua API Key bằng định dạng JSON
+    // 1. Thử lấy dữ liệu từ Addlivetag qua JSON với các endpoint khác nhau
     for (const key of API_KEYS) {
       try {
-        const res = await fetch(`https://addlivetag.com/tool/conversion/zalo.php?export=json&key=${key}`, {
-          cache: 'no-store',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*'
-          }
-        });
+        const urls = [
+          `https://addlivetag.com/tool/conversion/index.php?export=json&key=${key}&from=2026-09-01&to=2026-10-31`,
+          `https://addlivetag.com/tool/conversion/zalo.php?export=json&key=${key}&from=2026-09-01&to=2026-10-31`
+        ];
 
-        if (res.ok) {
-          const text = await res.text();
-          try {
-            const json = JSON.parse(text);
-            if (Array.isArray(json) && json.length > 0) {
-              rawData = json;
-              break;
+        for (const url of urls) {
+          const res = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*'
             }
-          } catch (e) {
-            // Không phải JSON thuần
+          });
+
+          if (res.ok) {
+            const text = await res.text();
+            try {
+              const json = JSON.parse(text);
+              if (Array.isArray(json) && json.length > 0) {
+                rawData = json;
+                break;
+              }
+            } catch (e) {
+              // Không phải JSON thuần
+            }
           }
         }
+        if (rawData) break;
       } catch (err) {
-        console.log(`Key ${key} không phản hồi, thử phương án tiếp...`);
+        console.log(`Key ${key} không phản hồi...`);
       }
     }
 
@@ -70,7 +78,7 @@ async function handleSync() {
 
     const ordersToInsert = [];
 
-    // Trường hợp 1: Có dữ liệu JSON từ API -> Chuẩn hóa dữ liệu khớp với bảng 'orders'
+    // Trường hợp 1: Có dữ liệu JSON từ API -> Chuẩn hóa dữ liệu
     if (rawData && Array.isArray(rawData)) {
       for (const item of rawData) {
         const orderId = String(item.madon || item.order_id || item.orderCode || '').trim();
